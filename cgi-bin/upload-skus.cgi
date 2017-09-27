@@ -61,4 +61,6 @@ sub main {
     # close $IN;
 
     print "Content-type: application/json\r\n\r\n{\"path\":\"$merged_path\"}\n\r";
+
+    `rm -rf "$sku_csv"`;
 }

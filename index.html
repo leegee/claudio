@@ -15,11 +15,12 @@
 
         <link rel="stylesheet" href="css/normalize.css">
         <link rel="stylesheet" href="css/main.css">
-
-        <script src="https://apis.google.com/js/platform.js" async defer></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/2.3.0/mustache.min.js"></script>
 
-        <script src="js/vendor/modernizr-3.5.0.min.js"></script>
+        <script async defer src="https://apis.google.com/js/api.js"
+            onload="this.onload=function(){};handleClientLoad()"
+            onreadystatechange="if (this.readyState === 'complete') this.onload()">
+        </script>
 
         <style>
         .page {
@@ -30,14 +31,54 @@
         }
         </style>
 
-        <script defer>
+        <script>
         var App = {
-            config: { 
-                endpoints: {
-                    uploadSkus: '/cgi-bin/upload-skus.cgi'
-                }
+            fusion: {
+                name: 'lee-dev',
+            },
+            endpoints: {
+                uploadSkus: '/cgi-bin/upload-skus.cgi'
             }
         };
+
+        function handleClientLoad() {
+            // Loads the client library and the auth2 library together for efficiency.
+            // Loading the auth2 library is optional here since `gapi.client.init` function will load
+            // it if not already loaded. Loading it upfront can save one network request.
+            gapi.load('client:auth2', initClient);
+        }
+
+        function initClient() {
+            // Initialize the client with API key and People API, and initialize OAuth with an
+            // OAuth 2.0 client ID and scopes (space delimited string) to request access.
+            console.log('pre auth')
+            gapi.client.init({
+                apiKey: 'AIzaSyDAdOILIN2SPM_1iPKJMbHd9jOck8H9J7o',
+                // discoveryDocs: ["https://people.googleapis.com/$discovery/rest?version=v1"],
+                clientId: '837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com',
+                scope: 'profile https://www.googleapis.com/auth/fusiontables'
+            }).then(function () {
+                console.log('post auth')
+                // Listen for sign-in state changes.
+                // gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
+                // Handle the initial sign-in state.
+                if (gapi.auth2.getAuthInstance().isSignedIn.get()) {
+                    window.wizard.nextPage();
+                }
+            });
+        }
+
+        function makeApiCall() {
+            // Make an API call to the People API, and print the user's given name.
+            gapi.client.people.people.get({
+                'resourceName': 'people/me',
+                'requestMask.includeField': 'person.names'
+            }).then(function(response) {
+                console.log('Hello, ' + response.result.names[0].givenName);
+            }, function(reason) {
+                console.log('Error: ' + reason.result.error.message);
+            });
+        }
 
         // Show the first page (login) when the DOM is ready
         document.addEventListener("DOMContentLoaded", function(event) {
@@ -46,13 +87,12 @@
             window.wizard.nextPage();
         });
 
-        var onSignIn = function (googleUser) {
-            App.profile = googleUser.getBasicProfile();
-            // console.log('ID: ' + profile.getId()); // Do not send to your backend! Use an ID token instead.
-            // console.log('Name: ' + profile.getName());
-            // console.log('Image URL: ' + profile.getImageUrl());
-            // console.log('Email: ' + profile.getEmail()); // This is null if the 'email' scope is not present.
-            setTimeout( () => {window.wizard.nextPage()}, 100);
+        var page1 = function () {
+            document.getElementById('sign-in').addEventListener('click', () => {
+                gapi.auth2.getAuthInstance().signIn().then( () => {
+                    window.wizard.nextPage();
+                })
+            });
         }
 
         var page2 = function () {
@@ -75,31 +115,41 @@
                 console.log('request.readyState', request.readyState, XMLHttpRequest.DONE);
                 console.log('res=', request.responseText);
                 if (request.readyState === XMLHttpRequest.DONE) {
-                    document.getElementById("meta").innerHTML = '<h3>Response</h3>' + request.responseText;
-                    console.log(request.responseText);
+                    App.lastResponseText = request.responseText;
                     if (request.responseText.indexOf('Software error') === -1) {
                         console.log('-------------ok------------');
                         console.log(request.responseText);
                         var json = JSON.parse(request.responseText);
                         console.log(json);
                         App.geoSkuPath = json.path;
-                        window.wizard.nextPage( App.geoSkuPath );
+                        window.wizard.nextPage();
                     }
                 }
             }
-            request.open('POST', App.config.endpoints.uploadSkus);
+            request.open('POST', App.endpoints.uploadSkus);
             request.send(data);
         }
 
         var page5 = function () {
             console.log('page 5, path = ', App.geoSkuPath);
+            var data = new FormData();
+            data.append('uploadType', 'media');
+            data.append('name', App.fusion.name);
+            var request = new XMLHttpRequest();
+            request.onreadystatechange = () => {
+                console.log('request.readyState', request.readyState, XMLHttpRequest.DONE);
+                console.log('res=', request.responseText);
+                if (request.readyState === XMLHttpRequest.DONE) {
+                    App.lastResponseText = request.responseText;
+                }
+            }
+            request.open('POST', 'https://www.googleapis.com/upload/fusiontables/v2/tables/import');
+            request.send(data);
         }
-
 
         var Wizard = function () {
             this.page = 0;
         }
-
         Wizard.prototype.nextPage = function () {
             console.log('Wizard ', this, 'Page ', this.page, 'to', this.page + 1);
             this.page ++;
@@ -120,7 +170,7 @@
        </script>
 
         <script type='text/mustache' id='page-1'>
-            <div class="g-signin2" data-onsuccess="onSignIn"></div>
+            <button id='sign-in'>Sign In</button>
         </script>
 
         <script type='text/mustache' id='page-2'>
@@ -147,7 +197,9 @@
         </script>
 
         <script type='text/mustache' id='page-5'>
-            See https://www.googleapis.com/drive/v2 /files /files/$fileid
+            <p>{{App.geoSkuPath}}</p>
+            <p>See https://www.googleapis.com/drive/v2 /files /files/$fileid </p>
+            <p>Merge with https://drive.google.com/open?id=1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV</p>
         </script>
 
 
@@ -157,7 +209,9 @@
             <p class="browserupgrade">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience and security.</p>
         <![endif]-->
 
-        <h1>Izel Plants Map Updater</h1>
+        <header>
+            <h1>Map Updater</h1>
+        </header>
         <main id='main'></main>
 
 
