@@ -21,7 +21,7 @@ my $sku_csv     = 'latest_skus.csv';
 my $counties	= 'data/county_distrib_11-19-09.txt';
 
 my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
-my $merged_geo_skus_path = sprintf "temp/skus_%d%02d%02d-%02d%02d%02d/", $year+1900, $mon+1, $mday, $hour, $min, $sec;
+my $merged_geo_skus_dir = sprintf "temp/skus_%d%02d%02d-%02d%02d%02d/", $year+1900, $mon+1, $mday, $hour, $min, $sec;
 
 main();
 exit;
@@ -46,16 +46,13 @@ sub main {
     close $OUT;
     close $IN;
     
-    my ($rows_done, $skus_done, $path) = Izel::create_fusion_csv(
+    my ($rows_done, $skus_done, $merged_path) = Izel::create_fusion_csv(
         county_distributions_path   => $counties,
         stock_skus_path             => $sku_csv,
-        output_path	    	        => $merged_geo_skus_path,
+        output_path	    	        => $merged_geo_skus_dir,
     );
 
-    #     Dumper($skus_done), "\n\r",
-    #     Dumper($path), "\n\r";
-
-    # open my $IN, $merged_geo_skus_path or die "$! - $merged_geo_skus_path";
+    # open my $IN, $merged_path or die "$! - $merged_geo_skus_dir";
     # binmode $IN;
     # local $/ = \2048;
     # while (<$IN>) {
@@ -63,5 +60,5 @@ sub main {
     # }
     # close $IN;
 
-    print "Content-type: application/json\r\n\r\n{path:\"$merged_geo_skus_path\"}\n\r";
+    print "Content-type: application/json\r\n\r\n{\"path\":\"$merged_path\"}\n\r";
 }
