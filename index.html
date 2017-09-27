@@ -1,0 +1,168 @@
+<!doctype html>
+<html class="no-js" lang="">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="x-ua-compatible" content="ie=edge">
+        <title>Izel Plants Map Uploader</title>
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="google-signin-client_id" content="837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com">
+        
+        <link rel="manifest" href="site.webmanifest">
+        <link rel="apple-touch-icon" href="icon.png">
+        <!-- Place favicon.ico in the root directory -->
+
+        <link rel="stylesheet" href="css/normalize.css">
+        <link rel="stylesheet" href="css/main.css">
+
+        <script src="https://apis.google.com/js/platform.js" async defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/2.3.0/mustache.min.js"></script>
+
+        <script src="js/vendor/modernizr-3.5.0.min.js"></script>
+
+        <style>
+        .page {
+            display: none;
+            border: 1px solid gray;
+            padding: 1em;
+            margin: 1em 0;
+        }
+        </style>
+
+        <script defer>
+        var config = { 
+            endpoints: {
+                uploadSkus: '/cgi-bin/upload-skus.cgi'
+            }
+        };
+        var App = {};
+
+        // Show the first page (login) when the DOM is ready
+        document.addEventListener("DOMContentLoaded", function(event) {
+            // document.getElementsByClassName('page 1')[0].setAttribute('style', 'display: block');
+            window.wizard = new Wizard();
+            window.wizard.nextPage();
+        });
+
+        var onSignIn = function (googleUser) {
+            App.profile = googleUser.getBasicProfile();
+            // console.log('ID: ' + profile.getId()); // Do not send to your backend! Use an ID token instead.
+            // console.log('Name: ' + profile.getName());
+            // console.log('Image URL: ' + profile.getImageUrl());
+            // console.log('Email: ' + profile.getEmail()); // This is null if the 'email' scope is not present.
+            setTimeout( () => {window.wizard.nextPage()}, 100);
+        }
+
+        var page2 = function () {
+            document.getElementById('skus').addEventListener('change', function() {
+                App.file = this.files[0];
+                window.wizard.nextPage();
+            }, false);
+        }
+
+        var page3 = function () {
+            document.getElementById('cancel-skus').addEventListener('click', document.location.reload, false);
+            document.getElementById('upload-skus').addEventListener('click', () => {window.wizard.nextPage()}, false);
+        }            
+
+        var page4 = function () {
+            var data = new FormData();
+            data.append('skus-csv', App.file);
+            var request = new XMLHttpRequest();
+            request.onreadystatechange = () => {
+                console.log('request.readyState', request.readyState, XMLHttpRequest.DONE);
+                console.log('res=', request.responseText);
+                if (request.readyState === XMLHttpRequest.DONE) {
+                    document.getElementById("meta").innerHTML = '<h3>Response</h3>' + request.responseText;
+                    console.log(request.responseText);
+                    if (request.responseText.indexOf('Software error') === -1) {
+                        var json = JSON.parse(request.responseText);
+                        var path = json.path;
+                        window.wizard.nextPage( path );
+                    }
+                }
+            }
+            request.open('POST', config.endpoints.uploadSkus);
+            request.send(data);
+        }
+
+        var page5 = function (path) {
+            console.log('page 5, path = ', path);
+        }
+
+
+        var Wizard = function () {
+            this.page = 0;
+        }
+
+        Wizard.prototype.nextPage = function () {
+            console.log('Wizard ', this, 'Page ', this.page, 'to', this.page + 1);
+            this.page ++;
+            try {
+                document.getElementById('main').innerHTML = Mustache.render(
+                    document.getElementById('page-' + this.page).innerHTML.toString(), 
+                    {App: App}
+                );
+            } catch (e) {
+                console.error(e);
+            }
+            var fn = 'page' + this.page;
+            if (typeof window[fn] === 'function') {
+                window[fn]( arguments );
+            }
+            console.log('Page = ', this.page);
+        }
+       </script>
+
+        <script type='text/mustache' id='page-1'>
+            <div class="g-signin2" data-onsuccess="onSignIn"></div>
+        </script>
+
+        <script type='text/mustache' id='page-2'>
+            <div id='select'>
+                <p><label for='skus'>Select the SKU CSV file:</label></p>
+                <p><input type='file' name='skus' id='skus' placeholder='SKUs CSV' type='.csv'></p>
+            </div>
+        </script>
+
+        <script type='text/mustache' id='page-3'>
+            Page 3. 
+            <div id='meta'>
+            <dl>
+                <dt>Name<dt><dd>{{App.file.name}}</dd>
+                <dt>Size<dt><dd>{{App.file.size}}</dd>
+                <dt>Last Modified<dt><dd>{{App.file.lastModifiedDate}}</dd>
+            </dl>
+            <button id="upload-skus">Add this file's skus to the map</button>
+            <button id="cancel-skus">Cancel</button>
+        </script>
+
+        <script type='text/mustache' id='page-4'>
+            Server responding...
+        </script>
+
+        <script type='text/mustache' id='page-5'>
+            See https://www.googleapis.com/drive/v2 /files /files/$fileid
+        </script>
+
+
+    </head>
+    <body>
+        <!--[if lte IE 9]>
+            <p class="browserupgrade">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience and security.</p>
+        <![endif]-->
+
+        <h1>Izel Plants Map Updater</h1>
+        <main id='main'></main>
+
+
+        <!-- Google Analytics: change UA-XXXXX-Y to be your site's ID.
+        <script>
+            window.ga=function(){ga.q.push(arguments)};ga.q=[];ga.l=+new Date;
+            ga('create','UA-XXXXX-Y','auto');ga('send','pageview')
+        </script> 
+        <script src="https://www.google-analytics.com/analytics.js" async defer></script>
+        -->
+    </body>
+</html>
