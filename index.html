@@ -31,12 +31,13 @@
         </style>
 
         <script defer>
-        var config = { 
-            endpoints: {
-                uploadSkus: '/cgi-bin/upload-skus.cgi'
+        var App = {
+            config: { 
+                endpoints: {
+                    uploadSkus: '/cgi-bin/upload-skus.cgi'
+                }
             }
         };
-        var App = {};
 
         // Show the first page (login) when the DOM is ready
         document.addEventListener("DOMContentLoaded", function(event) {
@@ -77,18 +78,21 @@
                     document.getElementById("meta").innerHTML = '<h3>Response</h3>' + request.responseText;
                     console.log(request.responseText);
                     if (request.responseText.indexOf('Software error') === -1) {
+                        console.log('-------------ok------------');
+                        console.log(request.responseText);
                         var json = JSON.parse(request.responseText);
-                        var path = json.path;
-                        window.wizard.nextPage( path );
+                        console.log(json);
+                        App.geoSkuPath = json.path;
+                        window.wizard.nextPage( App.geoSkuPath );
                     }
                 }
             }
-            request.open('POST', config.endpoints.uploadSkus);
+            request.open('POST', App.config.endpoints.uploadSkus);
             request.send(data);
         }
 
-        var page5 = function (path) {
-            console.log('page 5, path = ', path);
+        var page5 = function () {
+            console.log('page 5, path = ', App.geoSkuPath);
         }
 
 
@@ -139,7 +143,7 @@
         </script>
 
         <script type='text/mustache' id='page-4'>
-            Server responding...
+            Talking to the server....
         </script>
 
         <script type='text/mustache' id='page-5'>

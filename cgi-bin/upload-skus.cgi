@@ -34,7 +34,7 @@ sub main {
     }
     binmode $IN;
 
-    open my $OUT,">:utf8", $sku_csv or die $!;
+    open my $OUT,">:utf8", $sku_csv or die "$! - $sku_csv";
  
     my $io_handle = $IN->handle;
     binmode $io_handle;
@@ -47,10 +47,9 @@ sub main {
     close $IN;
     
     my ($rows_done, $skus_done, $path) = Izel::create_fusion_csv(
-        county_distributions_path => $counties,
-        stock_skus_path => $sku_csv,
-        merged_geo_skus_path		=> $merged_geo_skus_path,
-        log             => *STDIN
+        county_distributions_path   => $counties,
+        stock_skus_path             => $sku_csv,
+        output_path	    	        => $merged_geo_skus_path,
     );
 
     #     Dumper($skus_done), "\n\r",
