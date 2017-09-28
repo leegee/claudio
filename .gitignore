@@ -1,1 +1,8 @@
 cgi-bin/temp
+logs/
+lib/
+scripts/
+DEV.md
+README.txt
+izelplants-fusion-tables
+.env.js
