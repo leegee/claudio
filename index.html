@@ -1,9 +1,9 @@
 <!doctype html>
-<html class="no-js" lang="">
+<html class="no-js" lang="en">
     <head>
         <meta charset="utf-8">
         <meta http-equiv="x-ua-compatible" content="ie=edge">
-        <title>Izel Plants Map Uploader</title>
+        <title>Map Uploader</title>
 
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -21,15 +21,6 @@
             onload="this.onload=function(){};handleClientLoad()"
             onreadystatechange="if (this.readyState === 'complete') this.onload()">
         </script>
-
-        <style>
-        .page {
-            display: none;
-            border: 1px solid gray;
-            padding: 1em;
-            margin: 1em 0;
-        }
-        </style>
 
         <script>
         var App = {
@@ -51,15 +42,13 @@
         function initClient() {
             // Initialize the client with API key and People API, and initialize OAuth with an
             // OAuth 2.0 client ID and scopes (space delimited string) to request access.
-            console.log('pre auth')
             gapi.client.init({
                 apiKey: 'AIzaSyDAdOILIN2SPM_1iPKJMbHd9jOck8H9J7o',
                 // discoveryDocs: ["https://people.googleapis.com/$discovery/rest?version=v1"],
                 clientId: '837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com',
                 scope: 'profile https://www.googleapis.com/auth/fusiontables'
             }).then(function () {
-                console.log('post auth')
-                // Listen for sign-in state changes.
+                // Listen for sign-in state changes:
                 // gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
                 // Handle the initial sign-in state.
                 if (gapi.auth2.getAuthInstance().isSignedIn.get()) {
@@ -149,6 +138,9 @@
 
         var Wizard = function () {
             this.page = 0;
+            this.el = {
+                currentPage: document.getElementById('currentPage')
+            }
         }
         Wizard.prototype.nextPage = function () {
             console.log('Wizard ', this, 'Page ', this.page, 'to', this.page + 1);
@@ -158,6 +150,7 @@
                     document.getElementById('page-' + this.page).innerHTML.toString(), 
                     {App: App}
                 );
+                this.el.currentPage.innerText = this.page;
             } catch (e) {
                 console.error(e);
             }
@@ -210,7 +203,7 @@
         <![endif]-->
 
         <header>
-            <h1>Map Updater</h1>
+            <h1>Map Updater <span id='currentPage'></span></h1>
         </header>
         <main id='main'></main>
 

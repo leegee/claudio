@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css?family=Pacifico|Roboto');
+
 /*! HTML5 Boilerplate v6.0.1 | MIT License | https://html5boilerplate.com/ */
 
 /*
@@ -277,7 +279,52 @@ textarea {
    Author's custom styles
    ========================================================================== */
 
-header,main {
+body {
+    font-family: 'Roboto', sans-serif;
+}
+
+header, main {
     background: #DDD;
     padding: 1em;
+}
+
+main {
+    padding-bottom: 4em;
+    max-width: 800pt;
+}
+
+.page {
+    display: none;
+    border: 1px solid gray;
+    padding: 1em;
+    margin: 1em 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: Pacifico;
+}
+
+header h2 {
+    text-align: right;
+    font-size: 10pt;
+}
+
+#currentPage::before {
+    content: 'Page ';
+    vertical-align: super;
+    font-size: 10pt;
+    font-weight: 100;
+    margin-left: -2em;
+}
+#currentPage {
+    display: inline-block;
+    float: right;
+    background: skyblue;
+    color: white;
+    min-width: 2em;
+    line-height: 2em;
+    padding: 1em;
+    text-align: center;
+    border: 1px solid steelblue;
+    border-radius: 3em;
 }
