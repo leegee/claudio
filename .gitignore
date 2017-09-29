@@ -1,4 +1,5 @@
 cgi-bin/temp
+node_modules/
 logs/
 lib/
 scripts/
@@ -6,3 +7,4 @@ DEV.md
 README.txt
 izelplants-fusion-tables
 .env.js
+reports/
