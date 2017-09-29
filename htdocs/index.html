@@ -24,6 +24,9 @@
 
         <script>
         var App = {
+            apikey: 'AIzaSyDAdOILIN2SPM_1iPKJMbHd9jOck8H9J7o',
+            clientId: '837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com',
+            scopes: 'https://www.googleapis.com/auth/fusiontables',
             fusion: {
                 name: 'lee-dev',
             },
@@ -43,10 +46,13 @@
             // Initialize the client with API key and People API, and initialize OAuth with an
             // OAuth 2.0 client ID and scopes (space delimited string) to request access.
             gapi.client.init({
-                apiKey: 'AIzaSyDAdOILIN2SPM_1iPKJMbHd9jOck8H9J7o',
-                // discoveryDocs: ["https://people.googleapis.com/$discovery/rest?version=v1"],
-                clientId: '837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com',
-                scope: 'profile https://www.googleapis.com/auth/fusiontables'
+                apiKey: App.apikey,
+                discoveryDocs: [
+                    // "https://www.googleapis.com/discovery/v1/apis/people/1",
+                    "https://www.googleapis.com/discovery/v1/apis/fusiontables/v2/rest"
+                ],
+                clientId: App.clientId,
+                scope: App.scopes
             }).then(function () {
                 // Listen for sign-in state changes:
                 // gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
@@ -71,7 +77,6 @@
 
         // Show the first page (login) when the DOM is ready
         document.addEventListener("DOMContentLoaded", function(event) {
-            // document.getElementsByClassName('page 1')[0].setAttribute('style', 'display: block');
             window.wizard = new Wizard();
             window.wizard.nextPage();
         });
@@ -132,7 +137,7 @@
                     App.lastResponseText = request.responseText;
                 }
             }
-            request.open('POST', 'https://www.googleapis.com/upload/fusiontables/v2/tables/import');
+            request.open('POST', 'https://www.googleapis.com/upload/fusiontables/v2/tables/import?key' + App.apikey);
             request.send(data);
         }
 
