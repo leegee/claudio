@@ -7,6 +7,7 @@ use lib 'lib';
 use Izel;
 
 # use utf8::all;
+use IO::Handle;
 use CGI;
 use CGI::Carp 'fatalsToBrowser';
 use Log::Log4perl ':easy';
@@ -30,7 +31,7 @@ sub main {
     my $cgi = CGI->new;
     my $IN  = $cgi->upload('skus-csv');
     if (! defined $IN) {
-        die 'No FH for upload, ' . $cgi->param('skus-csv');
+        die 'Missing file field, "skus-csv"';
     }
     binmode $IN;
 
@@ -52,15 +53,19 @@ sub main {
         output_path	    	        => $merged_geo_skus_dir,
     );
 
-    # open my $IN, $merged_path or die "$! - $merged_geo_skus_dir";
-    # binmode $IN;
-    # local $/ = \2048;
-    # while (<$IN>) {
-    #     print $_;
-    # }
-    # close $IN;
+    print "Content-type: text/csv\r\n\r\n";
 
-    print "Content-type: application/json\r\n\r\n{\"path\":\"$merged_path\"}\n\r";
+    open my $IN, $merged_path or die "$! - $merged_path";
+    binmode $IN;
+    local $/ = \2048;
+    while (<$IN>) {
+        print $_;
+    }
+    close $IN;
+
+    select()->flush();
+
+    # print "Content-type: application/json\r\n\r\n{\"path\":\"$merged_path\"}\n\r";
 
     `rm -rf "$sku_csv"`;
 }

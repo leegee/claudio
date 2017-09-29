@@ -31,22 +31,21 @@
         };
 
 
-        function handleClientLoad() {
-            window.setTimeout(checkAuth, 1);
-        }
+        var handleClientLoad = function () {
+            checkAuth();
+        };
 
-        function checkAuth() {
+        var checkAuth = function () {
             gapi.auth.authorize({
                 client_id: Config.clientId,
                 scope: Config.scopes,
                 immediate: true
             }, handleAuthResult);
-        }
+        };
 
-        function handleAuthResult(authResult) {
+        var handleAuthResult = function (authResult) {
             console.log('authResult', authResult);
             if (authResult && !authResult.error) {
-            // Access token has been successfully retrieved, requests can be sent to the API.
                 window.wizard = new Wizard( authResult.access_token );
                 window.wizard.nextPage();
             } else {
@@ -54,17 +53,36 @@
                 authButton.style.display = 'block';
                 authButton.addEventListener('click', checkAuth);
             }
-        }
+        };
+
+        var authString = function () {
+            return 'key=' + Config.apikey + '&access_token=' + window.wizard.access_token;
+        };
 
         var page1 = function () {
-            window.wizard.nextPage();
+            var request = new XMLHttpRequest();
+            request.onreadystatechange = () => {
+                if (request.readyState === XMLHttpRequest.DONE) {
+                    console.debug(request.responseText);
+                    window.wizard.fusionTableNames = JSON.parse(request.responseText).items;
+                    console.log( window.wizard.fusionTableNames )
+                    window.wizard.nextPage();
+                }
+            };
+            request.open('GET', 'https://www.googleapis.com/fusiontables/v2/tables?' + authString() );
+            request.send();
         }
 
         var page2 = function () {
-            document.getElementById('skus').addEventListener('change', function() {
+            document.getElementById('skus').addEventListener('change', function () {
                 window.wizard.file = this.files[0];
                 window.wizard.nextPage();
             }, false);
+            document.getElementById('selectFusionTable').addEventListener('click', function () {
+                var selectList = document.getElementById('fusionTableIds');
+                window.wizard.tableId = selectList.options[ selectList.selectedIndex ].value;
+                window.wizard.gotoPageName('merge');
+            });
         }
 
         var page3 = function () {
@@ -80,15 +98,9 @@
                 console.log('request.readyState', request.readyState, XMLHttpRequest.DONE);
                 console.log('res=', request.responseText);
                 if (request.readyState === XMLHttpRequest.DONE) {
-                    window.wizard.lastResponseText = request.responseText;
                     if (request.responseText.indexOf('Software error') === -1) {
                         console.log('-------------ok------------');
-                        console.log(request.responseText);
                         window.wizard.geoSkuData = request.responseText;
-                        // var json = JSON.parse(request.responseText);
-                        // console.log(json);
-                        // window.wizard.geoSkuPath = json.path;
-                        // window.wizard.geoSkuData = json.data;
                         window.wizard.nextPage();
                     }
                 }
@@ -100,16 +112,11 @@
         // https://developers.google.com/fusiontables/docs/v2/upload
         var page5 = function () {
             console.log('page 5');
-            // var data = new FormData();
-            // data.append('uploadType', 'media');
-            // data.append('name', Config.fusion.name);
-            // data.append('filename')
             var data = window.wizard.geoSkuData;
             console.log('data length', data.length);
             var request = new XMLHttpRequest();
             request.onreadystatechange = () => {
                 console.log('request.readyState', request.readyState, XMLHttpRequest.DONE);
-                console.log('res=', request.responseText);
                 if (request.readyState === XMLHttpRequest.DONE) {
                     window.Wizard.lastResponseText = request.responseText;
                 }
@@ -120,9 +127,10 @@
                 // 'https://www.googleapis.com/fusiontables/v2/tables/import' 
                 // 'https://www.googleapis.com/upload/upload/fusiontables/v2/tables/import'
                 + '?uploadType=media'
-                + '&key=' + Config.apikey
-                + '&access_token=' + window.wizard.access_token
+                + '&name=Testing'  
+                + '&' + authString()
             );
+            request.setRequestHeader('content-type', 'application/octet-stream');
             request.send(data);
         }
 
@@ -135,9 +143,22 @@
             };
             this.el.pageNumber.setAttribute('style', 'display:block"');
         }
-        Wizard.prototype.nextPage = function () {
+
+        Wizard.prototype.gotoPageName = function (pageName) {
+            console.log('Wizard ', this, 'Page ', this.page, 'to', pageName);
+            // find element with attribute data-name === pageName
+            this.nextPage(
+                document.querySelector('script[type="text/mustache"][data-name="merge"]').id.match(/^page-(\d+)$/)[1]
+            );
+        }
+
+        Wizard.prototype.nextPage = function (pageNumber) {
             console.log('Wizard ', this, 'Page ', this.page, 'to', this.page + 1);
-            this.page ++;
+            if (pageNumber) {
+                this.page = pageNumber;
+            } else {
+                this.page ++;
+            }
             try {
                 this.el.main.innerHTML = Mustache.render(
                     document.getElementById('page-' + this.page).innerHTML.toString(), 
@@ -160,9 +181,18 @@
         </script>
 
         <script type='text/mustache' id='page-2'>
-            <div id='select'>
-                <p><label for='skus'>Select the SKU CSV file:</label></p>
+            <div id='selectCsv'>
+                <p><label for='skus'>To create a new Fusion Table, select a SKU CSV file from your local machine:</label></p>
                 <p><input type='file' name='skus' id='skus' placeholder='SKUs CSV' type='.csv'></p>
+            </div>
+            <div id='listFusionTables'>
+                <p>Or choose an existing Fusion Table from this list of tables stored in your Google account:</p>
+                <select id='fusionTableIds' name='fusionTableIds'>
+                    {{#wizard.fusionTableNames}}
+                        <option value='{{tableId}}'>{{name}} ({{description}}</option>
+                    {{/wizard.fusionTableNames}}
+                </select>
+                <button id='selectFusionTable' name='selectFusionTable'>Choose</button>
             </div>
         </script>
 
@@ -186,6 +216,10 @@
             <p>{{window.wizard.geoSkuData}}</p>
             <p>See https://www.googleapis.com/drive/v2 /files /files/$fileid </p>
             <p>Merge with https://drive.google.com/open?id=1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV</p>
+        </script>
+
+        <script type='text/mustache' id='page-6' data-name='merge'>
+            Merging the two files....
         </script>
 
         <script type="text/javascript" src="https://apis.google.com/js/client.js?onload=handleClientLoad"></script>
