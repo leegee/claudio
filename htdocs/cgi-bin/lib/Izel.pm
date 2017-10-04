@@ -1,6 +1,5 @@
 use strict;
 use warnings;
-# use utf8::all;
 
 #
 # Not an ideal DB - not linked to Magento,
@@ -11,6 +10,7 @@ use warnings;
 package Izel;
 
 use Encode;
+use JSON::Any;
 use Log::Log4perl ':easy';
 use Text::CSV_XS;
 
@@ -61,13 +61,22 @@ sub create_fusion_csv_multiple {
 	my $args = ref($_[0])? shift : {@_};
     $args->{number_of_output_files} ||= 5;
 
+	my $fh_index = -1;
+	my $rows_done = 0;
+	my $az = {};
+	my $skus2files = {};
+
+	my $res = {
+		skus2files => {},
+		indexes => [],
+		# rows_done => 0,
+		# az => {}
+	};
+
     my $skus = load_stock_skus_from_csv($args);
 
 	open my $IN, "<:encoding(utf8)", $args->{county_distributions_path}
 		or LOGDIE "$! - $args->{county_distributions_path}";
-
-	my $rows_done = 0;
-	my $az = {};
 
 	my $csv_bar = Text::CSV_XS->new({
 		sep_char 	=> '|',
@@ -102,19 +111,17 @@ sub create_fusion_csv_multiple {
 	# Order output by volume.
 	# Write alternatly to one of several outupt files
 	my ($dir, $ext) = $args->{output_path} =~ /^(.+?)(\.[^.]+)?$/;
+	$res->{dir} = $dir;
 	mkdir $dir or die "$! - $dir";
 	my @OUT;
-	my @paths;
 	for my $i (0 .. $args->{number_of_output_files} -1){
 		my $path = $dir .'/'. $i . '.csv';
 		open my $fh, ">:encoding(utf8)", $path or die "$! - $path";
 		print $fh "GEO_ID2, SKU\n";
 		push @OUT, $fh;
-		push @paths, $path;
+		push @{$res->{indexes}}, $path;
 	}
 
-	my $fh_index = -1;
-	my $skus2files = {};
 	while (@keys){
 		$fh_index ++;
 		$fh_index = 0 if $fh_index >= $args->{number_of_output_files};
@@ -123,27 +130,31 @@ sub create_fusion_csv_multiple {
 			$initial, scalar( keys %{ $az->{$initial} }), $fh_index;
 
 		foreach my $sku (sort keys %{ $az->{$initial} }){
+
 			$skus2files->{$sku} = $fh_index;
+			$res->{skus2files}->{$sku} = $fh_index;
+
 			foreach my $geo_id2 (@{
 				$az->{$initial}->{$sku}
 			} ){
 				$csv_comma->print( $OUT[$fh_index], [
 					$geo_id2, $sku
 				]);
-                INFO "SKU IRCRA____ in $fh_index" if $sku eq 'IRCRA';
 			}
 		}
 	}
 
 	close $_ foreach @OUT;
 
-	open my $fh, ">:encoding(utf8)", "$dir/index.js" or die "$! - $args->{index_path}";
-	$_ = encode_json($skus2files);
-	s/"//sg;
-	print $fh $_;
+	INFO "Create $dir/index.js";
+	open my $fh, ">:encoding(utf8)", "$dir/index.js" or die "$! - $dir/index.js";
+	my $jsoner = JSON::Any->new;
+	my $jsonRes = $jsoner->encode( $res ); # $skus2files);
+	print $fh $jsonRes;
 	close $fh;
 
-	return $rows_done, $az, $skus2files;
+	# return $rows_done, $az, $skus2files;
+	return $jsonRes;
 }
 
 

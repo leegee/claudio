@@ -24,6 +24,7 @@
             scopes: 'https://www.googleapis.com/auth/fusiontables',
             fusion: {
                 name: 'lee-dev',
+                countiesTableId: '1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV'
             },
             endpoints: {
                 uploadSkus: '/cgi-bin/upload-skus.cgi'
@@ -91,6 +92,7 @@
         }            
 
         var page4 = function () {
+            console.log('Enter page4');
             var data = new FormData();
             data.append('skus-csv', window.wizard.file);
             var request = new XMLHttpRequest();
@@ -99,10 +101,14 @@
                 console.log('res=', request.responseText);
                 if (request.readyState === XMLHttpRequest.DONE) {
                     if (request.responseText.indexOf('Software error') === -1) {
-                        console.log('-------------ok------------');
+                        console.log('-------------ok------------\n', request.responseText, '--------------------------');
                         window.wizard.geoSkuData = request.responseText;
                         window.wizard.nextPage();
+                    } else {
+                        console.error('Error:', request.responseText);
                     }
+                } else {
+                    console.error('Not ready', request.readyState);
                 }
             }
             request.open('POST', Config.endpoints.uploadSkus);
@@ -112,13 +118,37 @@
         // https://developers.google.com/fusiontables/docs/v2/upload
         var page5 = function () {
             console.log('page 5');
-            var data = window.wizard.geoSkuData;
-            console.log('data length', data.length);
+            console.log('data length', window.wizard.geoSkuData.length);
             var request = new XMLHttpRequest();
             request.onreadystatechange = () => {
                 console.log('request.readyState', request.readyState, XMLHttpRequest.DONE);
                 if (request.readyState === XMLHttpRequest.DONE) {
-                    window.Wizard.lastResponseText = request.responseText;
+                    window.wizard.nextPage(2); // Show a list of uploaded files 
+                }
+            }
+            request.open(
+                'POST', 
+                'https://www.googleapis.com/upload/fusiontables/v2/tables/import'
+                // 'https://www.googleapis.com/fusiontables/v2/tables/import' 
+                // 'https://www.googleapis.com/upload/upload/fusiontables/v2/tables/import'
+                + '?uploadType=media'
+                + '&name=Testing'  
+                + '&' + authString()
+            );
+            request.setRequestHeader('content-type', 'application/octet-stream');
+            request.send(window.wizard.geoSkuData);
+        }
+
+        var page6 = function () {
+            console.log('page 6 - request a merge of ', window.wizard.tableId);
+            var data = new FormData;
+            data.append('tableId', window.wizard.tableId);
+            data.append('countiesTableId', Config.fusion.countiesTableId);
+            var request = new XMLHttpRequest();
+            request.onreadystatechange = () => {
+                console.log('request.readyState', request.readyState, XMLHttpRequest.DONE);
+                if (request.readyState === XMLHttpRequest.DONE) {
+                    console.log( request.responseText );
                 }
             }
             request.open(
@@ -176,9 +206,7 @@
         }
        </script>
 
-        <script type='text/mustache' id='page-1'>
-            <button id='sign-in'>Sign In</button>
-        </script>
+        <script type='text/mustache' id='page-1'>Skipping this page....</script>
 
         <script type='text/mustache' id='page-2'>
             <div id='selectCsv'>

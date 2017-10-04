@@ -1,136 +1,146 @@
-
-
 <!DOCTYPE html>
+
 <html>
-  <head>
-    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
-    <meta charset="utf-8">
-    <title>County-level Plant Species Distribution</title>
 
-    <style>
-      html, body, #map-canvas {
-        height: 100%;
-        margin: 0px;
-        padding: 0px
-      }
-    </style>
+<head>
+  <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+  <meta charset="utf-8">
+  <title>County-level Plant Species Distribution</title>
 
-    <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false"></script>
-    <script src="https://apis.google.com/js/client.js?onload=initialize"></script>
-
-    <script>
-
-Array.prototype.contains = function( subject ){
-    for (var i=0; i<this.length; i++){
-      if (this[i] == subject) return true;
+  <style>
+    html,
+    body,
+    #map-canvas {
+      height: 100%;
+      margin: 0px;
+      padding: 0px
     }
-    return false;
-}
+  </style>
 
-var LeeFusionMap = function(){
-    this.apiKey = 'AIzaSyCBeQP3Cje-GNZTxD0enheKc3lEu4CGzuY';
-    // AIzaSyDbgFEQy6WguaLRlRF0v3YbOzHgLeJo5iI';
-    this.center = new google.maps.LatLng(
+  <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false"></script>
+  <script src="https://apis.google.com/js/client.js?onload=initialize"></script>
+
+  <script>
+    var PROD = window.location.host.indexOf('localhost') === -1;
+    var FUSION_TABLE_IDS = [
+      '1LglOCvH_uligumYtUCS9lw9cdG-Gpcs8mz36H8NG',
+      '1yktl7CmjbeNQpdPLjYo4ip_5klk08DECgzWOcOjs',
+      '1gfI5LZ3cO0Ekz3CIzI1YaSnhCC8adpAbWw-0oZNz',
+      '1136dRv8wiKPqTn2to4Jo9lkk7dfjS5PLG4KLmaK',
+      '1brpLxQ8LErMmD4rOOlSlyKg3wMtQ9U6FNgrnSNNt'
+    ];
+
+    Array.prototype.contains = function (subject) {
+      for (var i = 0; i < this.length; i++) {
+        if (this[i] == subject) return true;
+      }
+      return false;
+    }
+
+    var LeeFusionMap = function () {
+      this.center = new google.maps.LatLng(
         39.50, -98.35   //  LAT. 39°50' LONG. -98°35' - centre of the continental USA
-    );
-    this.apiKey        = 'AIzaSyCBeQP3Cje-GNZTxD0enheKc3lEu4CGzuY'; // Lee
-    this.apiKey        = 'AIzaSyDBob2s-CgtHT6172BXX8PzEinSG3qyp3g'; // Izel
-    this.initialZoom    = 4;      	// 0=far out, 18?=close-up
-    this.minZoomLevel   = 7;
-    // this.scopes         = 'https://www.googleapis.com/auth/fusiontables';
+      );
+      this.apiKey = PROD ? 'AIzaSyDBob2s-CgtHT6172BXX8PzEinSG3qyp3g' : 'AIzaSyCBeQP3Cje-GNZTxD0enheKc3lEu4CGzuY';
+      // this.apiKey = PROD ? 'AIzaSyCBeQP3Cje-GNZTxD0enheKc3lEu4CGzuY' : 'AIzaSyDbgFEQy6WguaLRlRF0v3YbOzHgLeJo5iI';
+      this.initialZoom = 4;      	// 0=far out, 18?=close-up
+      this.minZoomLevel = 7;
+      // this.scopes         = 'https://www.googleapis.com/auth/fusiontables';
 
-    this.sku = window.location.hash.substring(1)
-           || window.location.search.substring(1)
-           || null;
+      this.sku = window.location.hash.substring(1)
+        || window.location.search.substring(1)
+        || null;
 
-    if (this.sku === null){
+      if (this.sku === null) {
         alert("Missing SKU in URI: should be at the end after a ? or a #");
         throw "No SKU in either location.search or location.hash!";
-    }
+      }
 
-    this.initApi();
-    this.map   = new google.maps.Map(document.getElementById('map-canvas'), {
-      center: this.center,
-      zoom:   this.initialZoom
-    });
-};
+      this.initApi();
+      this.map = new google.maps.Map(document.getElementById('map-canvas'), {
+        center: this.center,
+        zoom: this.initialZoom
+      });
+    };
 
-/* SKU-to-Table map:
-	our skus are in several tables, names in this.tables.
-	In this data, SKUs point to an index of this.tables,
-	which holds the fusion table names.
-
-    This data is output by the script 'create_fusion.pl'
-    as a file titled 'index.js'. Copy the contents to replace
-    the value below — we could load it dynamically but that
-    would slow down the page load.
-*/
-LeeFusionMap.prototype.sku2table = function(){
-    var sku2tableIdx = {QUCO2:4,EUSC5:1,RHAR4:0,DAFRF:4,SIAT:1,CAAP5:0,JURO:2,SYPA11:1,CUVI:0,SASE:1,ILMU:0,QULA3:4,TRRU2:2,HYMU:4,CADE12:0,ALCA3:2,ERAM5:1,SCRO5:1,ARBU:2,IRFU:0,TRVA2:2,ANVE:2,DEMA2:4,HYTE9:4,TAAS:2,EUMAM3:1,FAGR:3,RUTR2:0,SYDU2:1,SACE:1,SOSC:1,ECPA2:1,ACPE:2,PEDI:3,SCAT2:1,LOSP:3,CLCA:0,CAIN2:0,DICL:4,ELHY:1,MOCL:1,SCGA:1,PYVI:3,PRPU3:3,VINU:0,TECA3:2,VEVI:0,SOER:1,QUNI:4,MYFR:1,OSCL2:1,VEGL:0,BOCU:2,COAU:0,CAPL5:0,GOPU:3,HEVI3:4,RUHU:0,HEOC2:4,JUTE:2,SYERE:1,ELCA3:1,SYLA3:1,POAC4:3,MODI:1,SOSP2:1,DOIN2:4,LIMI7:3,AGARA:2,CHLA5:0,CABR14:0,MACA4:1,GEAN:3,SPPA:1,IRVE2:0,SOFL2:1,GIST5:3,CACA4:0,FIRU2:3,QUMU:4,PHAM3:3,CHTH2:0,SPAL2:1,CHVI3:0,ZIAU:0,HYCA:4,PAVI2:3,ASSY:2,ASCA:2,RHCO:0,CHIC:0,JUEF:2,LISCN2:3,HYDE:4,COAL2:0,SYFO:1,SOJU:1,SACA14:1,POPA5:3,SYOB:1,TRPE5:2,ERPU:1,STTR:1,SONU2:1,COLA5:0,HOPUP3:4,CHLY2:0,SMRO:1,ARRE6:2,GEGL:3,SYSH:1,BRLA4:2,LEOR:3,PEVI:3,AMFR:2,LIAS:3,ARAT:2,ANCA8:2,KOVI:4,BENI:2,SITR7:1,CAMU9:0,CIAR2:0,ACRA7:2,CARO22:0,ULAM:1,BAHA:2,ROVI2:0,ELCA4:1,UVSE:1,LILI:3,TRER3:2,ALTR3:2,SANI:1,JUVI:2,TRCA11:2,ARSE3:2,AMST80:2,CEOC:0,SOOD:1,FOGA:3,QUVI:4,CLKE:0,PAIN6:3,MAAS:1,DENU4:4,IRVI:0,CAAL5:0,CLAL3:0,COMA6:0,ACFA:2,HYVI:4,AGFO:2,POHY2:3,VIPU3:0,APHY:2,GABA:3,ASVE:2,APAM:2,ASPL:2,CAAN6:0,MIRE:1,CAFL22:0,MAGR7:1,HENOA:4,SAVI5:1,OSCI:1,IRPR:0,TROH:2,PHOP:3,KOMA:4,CAST8:0,GEMA:3,CHLA2:0,HEAMH:4,CHAN9:0,TIDI:2,DECA7:4,ANMA:2,SOAM3:1,LOIN:3,ERBU:1,CAOV2:0,AMAR3:2,EUSE3:1,PRMA14:3,SADI:1,LISU:3,ASTU:2,RHAT:0,PHLE5:3,CAPA5:0,EUAM9:1,CLVI3:0,ANGL4:2,CASC5:0,CUOR:0,COFL3:0,VAAR:0,CAAL8:0,STDI3:1,POCO14:3,ALSU:2,LISP:3,CATR7:0,DIAC2:4,TRSU2:2,SYOO:1,CAIN12:0,ARDR3:2,CADI10:0,CAEB2:0,HOSE2:4,SONE:1,RUCA4:0,CAAM18:0,SICA6:1,PHPA9:3,TRCU:2,SCIN:1,SYLAL3:1,VIRO2:0,CAAL3:0,OSCL:1,SCSA5:1,DILO:4,CRPH:0,SOLA4:1,TSCA:2,HEGI:4,CALA18:0,TRFL6:2,HASU3:4,AMCA4:2,VIST3:0,RHGL:0,SANIC4:1,MOFI:1,CATR:0,LEHI2:3,SCMA2:1,VINUC:0,ERAL5:1,DOUM2:4,ZAAM:0,ASCA2:2,AGAL5:2,GAUR2:3,CALO5:0,RIAM2:0,ACUN:2,ANSO:2,CAWO2:0,BICA:2,DECE:4,BABR2:2,AMHU:2,HOLO:4,SPCL:1,IMPA:0,DIVI4:4,EUFO3:1,HEMO2:4,CYFR4:0,VAST:0,CRVI2:0,LIST2:3,SCSE5:1,GAPR2:3,LYQU2:3,MORU2:1,AEPA2:2,SEMA11:1,DEPU2:4,GALA3:3,ASPU2:2,PAQU:3,HOJU:4,BEAL2:2,COAM2:0,SYPU:1,TICO:2,UVGR:1,BAAUM:2,POAR7:3,TRSE2:2,CHVI5:0,CAHY4:0,MECO:1,SIST:1,JUNI:2,LYLA:3,CLUM2:0,COSE5:0,RUHI2:0,CHCA2:0,HEVI4:4,ERHE4:1,VEST:0,CASP8:0,RUID:0,CHMA14:0,OXVI:1,GECR2:3,OSVI:1,DEGL4:4,PESM:3,SYLO2:1,BLCI:2,LISC2:3,RHVI2:0,RHAR3:0,LECA8:3,GERO:3,CAMU4:0,SAPA:1,LEAX:3,NYSY:2,EUCA26:1,HEAN2:4,PYMU:3,TADI2:2,PIRI:3,LALA:3,TRCA:2,MOCE2:1,ELAL5:1,CHGL2:0,OSRE:1,BEPO:2,EUDI16:1,CAAL27:0,BAALM:2,PRMA2:3,SYLA6:1,PRSE2:3,TIAM:2,PESU5:3,PHFL9:3,PHDI5:3,HEVI2:4,PIVI2:3,SIPI2:1,VILE:0,MACO5:1,MAVI5:1,ADPE:2,IOLI2:0,TRUN:2,CHNI2:0,PEOV2:3,DISP:4,SOBI:1,DEPA6:4,ARRA:2,HAPA3:4,ARMA7:2,SYPI2:1,DIVI5:4,LYQU:3,LIPH:3,COPE80:0,PECA:3,ITVI:0,PYTE:3,FESU3:3,EUAT5:1,CRCR2:0,SCLA2:1,SEHE3:1,EUCO10:1,HILA2:4,OEFR:1,HEDE:4,AUFL:2,HICA3:4,MIRI:1,CORO:0,SARA2:1,DAPU5:4,COAM3:0,VISO:0,JUTO:2,LIPI7:3,VESI:0,TRFL2:2,SCFL11:1,ILVE:0,QUPH:4,ARTR:2,SPTO2:1,CAAT4:0,QUBI:4,PAAM2:3,VEFA2:0,ALST:2,RUHIP:0,POSA3:3,LOSI:3,VEAL:0,ACSA3:2,MAVI2:1,RHMA4:0,VIRO:0,SCPUP5:1,NOBI2:2,MAAC:1,TRVI:2,JUCI:2,MOPU:1,CLCR:0,WAFR:4,DEAR2:4,EPVI2:1,XEAS:3,DIAM:4,ANGY2:2,AEFL:2,TAIN:2,PAPR7:3,COCA4:0,QUIL:4,VEVI4:0,MIDI3:1,SOAL6:1,ERYU:1,COVE5:0,EPLE2:1,CACR7:0,ZIAP:0,SPPE:1,SYPR6:1,SAAZ:1,PECA7:3,EUHY:1,FRVI:3,CACO26:0,CEAM:0,POBIC:3,ACPA:2,ANVI2:2,AGRO3:2,VICA4:0,RHVI:0,ELRI:1,IRVE:0,LUAL2:3,CALU4:0,CRMO2:0,CACA18:0,CLVI5:0,CIMU:0,SAAL5:1,DISE:4,CARA8:0,CRCA9:0,PHMA4:3,KAAN:4,IVFR:0,SAMA2:1,GITR6:3,LITU:3,ENBI:1,BREU:2,TRGR4:2,SYLA4:1,EUAX:1,LUAC:3,VIBL:0,QUPR2:4,CLSI2:0,HECO19:4,TRVI2:2,SOUL:1,RHVA:0,SCLA:1,CABE2:0,VIOPA2:0,PSNE:3,RULA3:0,VICU:0,SAPU4:1,PRVI:3,CESC:0,SOPA2:1,ANPL:2,MAAQ2:1,POBI2:3,VEGIG:0,COSE16:0,VAVI:0,QUPA2:4,AMCA6:2,POPE:3,SCIN2:1,AMTA2:2,PATR2:3,RHPE4:0,PAQU2:3,ROCA4:0,VIDE:0,MOBR2:1,PHVI8:3,CAGR5:0,VENO:0,VIAC:0,THDI:2,ARSP2:2,HYHI2:4,THTH2:2,CAGL8:0,ONSE:1,SPCE:1,ACRU2:2,DICA:4,ELOB2:1,EUMA27:1,ASSU3:2,PIAV:3,COCO13:0,SYCH4:1,DRMA4:4,MEVI:1,TRAU4:2,SPHE:1,PHST3:3,HEAU:4,PHCA47:3,HAVI4:4,SYDE2:1,ASEX:2,LOSE:3,RACO3:0,COPA10:0,SALA2:1,ACSA2:2,OLOH:1,PAAS2:3,POVI7:3,AGPA6:2,CALU5:0,VIPR:0,LIMI9:3,PIEC2:3,DIQU:4,PAAR4:3,HEHE5:4,CABI3:0,FRAM2:3,DICU:4,SYSE2:1,SYAN2:1,ALSE2:2,EUGR5:1,ASIN:2,PSOB3:3,JUGE:2,SPIN4:1,SILA3:1,PELA8:3,CAGY4:0,SERE2:1,PIST:3,VIPR4:0,PIPA2:3,RHCA7:0,COFL2:0,ANGE:2,ROBL:0,LYLU3:3,LIMI:3,TYAN:2,POLA4:3,HEAR6:4,LYCI:3,SOMA4:1,THVI:2,HIPA2:4,ALCE2:2,SCSC:1,SITE:1,AQCH:2,SORU2:1,VEUR:0,CLVI4:0,CECA4:0,SOCA4:1,SOSE:1,ILOP:0,GELA:3,CAPL4:0,PLOC:3,CARA2:0,COCA13:0,PODE3:3,RHMA:0,GERI2:3,TRLU3:2,CEOC2:0,VITR4:0,ILGL:0,SALY2:1,ECPA:1,VILA10:0,OPHU:1,MATR:1,MARA7:1,SETE3:1,VIPA18:0,QUAL:4,HYAR:4,QUMA2:4,PEGR7:3,HYPR:4,TRBR:2,EUPE3:1,CAPE6:0,PYVE:3,RUOD:0,RHTY:0,SIPE2:1,PORE2:3,SYOOO:1,ORAQ:1,SCSCS:1,PAAU3:3,HEAM6:4,IRCR:0,SAFL4:1,CLAC3:0,VILA8:0,ASTR:2,PIFL:3,CACR4:0,TRAR:2,BESY:2,DILU:4,CHFA2:0,SPAL:1,HELO5:4,ILCA:0,ARUV:2,VAAN:0,HEMA2:4,RAPI:0,STNIN:1,RHPR2:0,CARO2:0,HACA3:4,STAM4:1,HYCR3:4,POVI2:3,PRPE2:3,CAFO6:0,KALA:4,XASI:3,CASP7:0,GABR5:3,BATI:2,THPU2:2,CASQ2:0,PHME13:3,MAST:1,SYCO4:1,SIRE2:1,TRPU3:2,SYNO3:1,SICA9:1,EURA5:1,HYCA3:4,VIAU:0,PAIN3:3,HYPU:4,ARDI8:2,SCOV:1,JUCO6:2,MEVI3:1,SOSP4:1,ZEPU3:0,IRVIS:0,BUSI:2,ERAQ:1,CORA6:0,BRKA2:2,ERAL9:1,HYQU3:4,LISQ:3,RUFU2:0,CABR10:0,HENOO:4,PTTR:3,FRPE:3,SPCR:1,POTR5:3,GYDI:3,MAST4:1,VIPE:0,PHGL4:3,BITR:2,DEEX:4,APCA:2,PRLA9:3,BAAU:2,CAFR3:0,COMA19:0,PITA:3,PEHI:3,SCCY:1,LUMU2:3,CRSA4:0,ACRU:2,AGSC:2,DACA7:4,CAGR2:0,AMLA:2,MOPE6:1,TROC:2,TYLA:2,PRVU:3,ECAN2:1,DIEX:4,HEST:4,CYAC3:0,AEPA:2,RUSU:0,SYRA5:1,GETR:3,GASP5:3,ALINR:2,GECL:3,TRRE5:2,QUMI:4,PIMA:3,CHLU:0,SPAM:1,EUPU10:1,HEGR4:4,ANVI3:2,CAAM2:0,AQCA:2,HAVE2:4,QULY:4,IRVES:0,SMHE:1,PRAM:3,CAPU9:0,CASC11:0,SIIN2:1,CAVU2:0,HEDI2:4,HEOCO:4,SAPE8:1,ASBI4:2,PECA8:3,VEGI:0,THNO:2,PYIN:3,HEPA19:4,SYNO2:1,ASQU:2,COPU2:0,ATFI:2,HYCA9:4,VEHA2:0,GECA7:3,VICAC:0,QURU:4,COOB2:0,ARCAC:2,QUVE:4,SACA13:1,ANVI13:2,LOCA2:3,OXAR:1,ACAM:2,ROPA:0,PIRE:3,CATH2:0,CAGR3:0,SOPU:1,ASCA11:2,SCTA2:1,VACR:0,BOGR2:2,UVPE:1,BELE:2,CAST5:0,ACNO2:2,SYAL:1,QUMA3:4,ERSP:1,ILCO:0,LIPY:3,AGNE2:2,ROSE2:0,SPMA3:1,SIMO2:1,CACR6:0,HESH2:4,SYHI:1,SIAN3:1,PHSU3:3,HIMO:4,SAAN:1,QUFA:4,DASP2:4,DRIN5:4,ELVI3:1,LIBE3:3,GYDR:3,ANGL2:2,PHPI:3,SIVI4:1,AMMU:2,PHPY4:3,JEDI:2,DOME:4,VACO:0,BAAL:2,DICY2:4,ANNE:2,CACO8:0,BICO:2,RHCA4:0,ECPU:1,OLRI:1,DETR:4,LUPE3:3,HYFR:4,SYOR:1,LEVI6:3,SOUL2:1};
-
-    var tables = [
-    	'1LglOCvH_uligumYtUCS9lw9cdG-Gpcs8mz36H8NG',
-    	'1yktl7CmjbeNQpdPLjYo4ip_5klk08DECgzWOcOjs',
-    	'1gfI5LZ3cO0Ekz3CIzI1YaSnhCC8adpAbWw-0oZNz',
-    	'1136dRv8wiKPqTn2to4Jo9lkk7dfjS5PLG4KLmaK',
-    	'1brpLxQ8LErMmD4rOOlSlyKg3wMtQ9U6FNgrnSNNt'
-    ];
-    var idx = sku2tableIdx[ this.sku ];
-    var rv = tables[ idx ];
-    if (console) console.log('Using Fusion Table %s, id %s', idx, rv);
-    return rv;
-}
-
-LeeFusionMap.prototype.initApi = function(){
-  var self = this;
-  // gapi.client.setApiKey(this.apiKey);
-  return;
-}
-
-/**
-  // Run OAuth 2.0 authorization.
-  window.setTimeout( function() {
-    // Request auth
-    gapi.auth.authorize({
-      client_id: self.client_id,
-      scope:     self.scopes,
-      immediate: true
-    },
-    // Handle response
-    function(){
-      throw 'Not authorised - check api_key and client_id for this domain.'
-    }
-  }, 1);
-}
-**/
-
-LeeFusionMap.prototype.run = function(){
-    var self = this;
-    var layer = new google.maps.FusionTablesLayer({
-        query: {
-            select: '\'geometry\'',
-            from: this.sku2table(),
-            where: "sku='"+this.sku+"'"
-	        // where: "'FIPS formula' IN (48243.0)"
+    LeeFusionMap.prototype.loadJson = function (next) {
+      var xobj = new XMLHttpRequest();
+      xobj.overrideMimeType("application/json");
+      xobj.open('GET', 'skus.json', true);
+      xobj.onreadystatechange = function () {
+        if (xobj.readyState == 4 && xobj.status == "200") {
+          next( JSON.parse(xobj.responseText) );
         }
+      };
+      xobj.send(null);
+    }
+
+    /* SKU-to-Table map:
+      our skus are in several tables, names in this.tables.
+      In this data, SKUs point to an index of this.tables,
+      which holds the fusion table names.
+    
+        This data is output by the script 'create_fusion.pl'
+        as a file titled 'index.js'. Copy the contents to replace
+        the value below — we could load it dynamically but that
+        would slow down the page load.
+    */
+    LeeFusionMap.prototype.sku2table = function () {
+        this.loadJson(function (sku2tableIdx) {
+        var idx = sku2tableIdx[this.sku];
+        var rv = FUSION_TABLE_IDS[idx];
+        if (console) console.log('Using Fusion Table %s, id %s', idx, rv);
+        return rv;
+      })
+    }
+
+    LeeFusionMap.prototype.initApi = function () {
+      var self = this;
+      // gapi.client.setApiKey(this.apiKey);
+      return;
+    }
+
+    /**
+      // Run OAuth 2.0 authorization.
+      window.setTimeout( function() {
+        // Request auth
+        gapi.auth.authorize({
+          client_id: self.client_id,
+          scope:     self.scopes,
+          immediate: true
+        },
+        // Handle response
+        function(){
+          throw 'Not authorised - check api_key and client_id for this domain.'
+        }
+      }, 1);
+    }
+    **/
+
+    LeeFusionMap.prototype.run = function () {
+      var self = this;
+      var layer = new google.maps.FusionTablesLayer({
+        query: {
+          select: '\'geometry\'',
+          from: this.sku2table(),
+          where: "sku='" + this.sku + "'"
+          // where: "'FIPS formula' IN (48243.0)"
+        }
+      });
+      layer.setMap(this.map);
+      console.log('set fusion layer on map for [%s]', this.sku)
+    }
+
+
+    google.maps.event.addDomListener(window, 'load', function initialize() {
+      var map = new LeeFusionMap();
+      map.run()
     });
-    layer.setMap( this.map );
-    console.log('set fusion layer on map for [%s]', this.sku)
-}
+  </script>
+</head>
 
+<body>
+  <div id="map-canvas"></div>
+</body>
 
-google.maps.event.addDomListener(window, 'load', function initialize() {
-  var map = new LeeFusionMap();
-  map.run()
-});
-
-
-
-
-    </script>
-  </head>
-  <body>
-    <div id="map-canvas"></div>
-  </body>
 </html>
-

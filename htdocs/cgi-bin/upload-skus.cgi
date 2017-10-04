@@ -1,10 +1,6 @@
 #!perl
-
 use strict;
 use warnings;
-
-use lib 'lib';
-use Izel;
 
 # use utf8::all;
 use IO::Handle;
@@ -13,7 +9,16 @@ use CGI::Carp 'fatalsToBrowser';
 use Log::Log4perl ':easy';
 use Data::Dumper;
 
-Log::Log4perl->easy_init( $DEBUG );
+use lib 'lib';
+use Izel;
+
+Log::Log4perl->easy_init({
+    file => 'C:/Users/User/src/izel/htdocs/cgi.log',
+    level => DEBUG
+});
+
+TRACE 'Init';
+
 $CGI::POST_MAX = 1024 * 10000;
 $CGI::DISABLE_UPLOADS = 0; 
 $| = 1;
@@ -28,6 +33,8 @@ main();
 exit;
 
 sub main {
+    print "Content-type: text/csv\r\n\r\n";
+
     my $cgi = CGI->new;
     my $IN  = $cgi->upload('skus-csv');
     if (! defined $IN) {
@@ -35,37 +42,46 @@ sub main {
     }
     binmode $IN;
 
-    open my $OUT,">:utf8", $sku_csv or die "$! - $sku_csv";
- 
+    TRACE 'Write uploaded skus to ', $sku_csv;
+    open my $OUT,">:utf8", $sku_csv or LOGDIE "$! - $sku_csv";
     my $io_handle = $IN->handle;
     binmode $io_handle;
     while (my $bytesread = $io_handle->read(my $buffer,1024)) {
-        INFO $OUT;
         print $OUT $buffer;
     }
 
     close $OUT;
     close $IN;
+    TRACE 'Finished writing uploaded skus to file';
     
-    my ($rows_done, $skus_done, $merged_path) = Izel::create_fusion_csv(
+# my ($row_count, $skus_count, $path) = Izel::Init::create_fusion_csv_multiple(
+# 	county_distributions_path => $counties,
+# 	stock_skus_path => $sku,
+# 	output_path		=> $output,
+#     number_of_output_files => $number_of_output_files,
+# );
+
+    TRACE 'Call create_fusion_csv_multiple';
+    my $jsonRes = Izel::create_fusion_csv_multiple(
         county_distributions_path   => $counties,
         stock_skus_path             => $sku_csv,
         output_path	    	        => $merged_geo_skus_dir,
     );
+    TRACE 'Done  create_fusion_csv_multiple';
 
-    print "Content-type: text/csv\r\n\r\n";
+    warn Dumper $jsonRes;
 
-    open my $IN, $merged_path or die "$! - $merged_path";
-    binmode $IN;
-    local $/ = \2048;
-    while (<$IN>) {
-        print $_;
-    }
-    close $IN;
+    # TRACE 'Reading merged_path, ', $merged_path;
+    # open $IN, $merged_path or die "$! - $merged_path";
+    # binmode $IN;
+    # local $/ = \2048;
+    # while (<$IN>) {
+    #     print $_;
+    # }
+    # close $IN;
 
-    select()->flush();
+    # select()->flush();
 
     # print "Content-type: application/json\r\n\r\n{\"path\":\"$merged_path\"}\n\r";
-
-    `rm -rf "$sku_csv"`;
+    print "Content-type: application/json\r\n\r\n", $jsonRes;
 }
