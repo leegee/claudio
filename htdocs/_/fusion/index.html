@@ -86,9 +86,10 @@
         would slow down the page load.
     */
     LeeFusionMap.prototype.sku2table = function () {
-        this.loadJson(function (sku2tableIdx) {
-        var idx = sku2tableIdx[this.sku];
-        var rv = FUSION_TABLE_IDS[idx];
+        this.loadJson(function (jsonIndex) {
+        var idx = jsonIndex.skus2tableIndex[this.sku];
+        // var rv = FUSION_TABLE_IDS[idx];
+        var rv = jsonIndex.tableIndex2tableId[idx];
         if (console) console.log('Using Fusion Table %s, id %s', idx, rv);
         return rv;
       })

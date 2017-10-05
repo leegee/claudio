@@ -64,10 +64,9 @@ sub create_fusion_csv_multiple {
 	my $fh_index = -1;
 	my $rows_done = 0;
 	my $az = {};
-	my $skus2files = {};
 
 	my $res = {
-		skus2files => {},
+		skus2tableIndex => {},
 		indexes => [],
 		# rows_done => 0,
 		# az => {}
@@ -130,9 +129,7 @@ sub create_fusion_csv_multiple {
 			$initial, scalar( keys %{ $az->{$initial} }), $fh_index;
 
 		foreach my $sku (sort keys %{ $az->{$initial} }){
-
-			$skus2files->{$sku} = $fh_index;
-			$res->{skus2files}->{$sku} = $fh_index;
+			$res->{skus2tableIndex}->{$sku} = $fh_index;
 
 			foreach my $geo_id2 (@{
 				$az->{$initial}->{$sku}
@@ -149,11 +146,11 @@ sub create_fusion_csv_multiple {
 	INFO "Create $dir/index.js";
 	open my $fh, ">:encoding(utf8)", "$dir/index.js" or die "$! - $dir/index.js";
 	my $jsoner = JSON::Any->new;
-	my $jsonRes = $jsoner->encode( $res ); # $skus2files);
+	my $jsonRes = $jsoner->encode( $res );
 	print $fh $jsonRes;
 	close $fh;
 
-	# return $rows_done, $az, $skus2files;
+	# return $rows_done, $az, $skus2tableIndex;
 	return $jsonRes;
 }
 
