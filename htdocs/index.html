@@ -26,6 +26,7 @@
                 name: 'lee-dev',
                 countiesTableId: '1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV',
                 sheetNameStem: 'lee-dev-',
+                maxRetries: 3
             },
             endpoints: {
                 uploadSkus: '/cgi-bin/upload-skus.cgi'
@@ -110,31 +111,48 @@
             request.send(data);
         }
 
-        // https://developers.google.com/fusiontables/docs/v2/upload
-        var page5 = function () {
-            console.log('page 5: ', window.wizard.indexRes);
-            var tableNumber = 0;
-            window.wizard.indexRes.indexes.forEach( indexPath => {
-                console.log('data length', window.wizard.indexRes.length);
+        var publishFusionTable = function (path, name, retries) {
+            retries = retries || 0;
+            return new Promise( (resolve, reject) => {
                 var request = new XMLHttpRequest();
                 request.onreadystatechange = () => {
                     console.log('request.readyState %s vs %s', request.readyState, XMLHttpRequest.DONE);
                     if (request.readyState === XMLHttpRequest.DONE) {
                         console.log( request.responseText );
-                        // window.wizard.nextPage(2); // Show a list of uploaded files 
+                        var res = JSON.parse( request.responseText );
+                        if (res.error && retries < Config.fusion.maxRetries) {
+                            publishFusionTable( path, name, ++retries ); // , tries );
+                            console.error('Retry ', retries);
+                        } else {
+                            resolve();
+                        }
                     }
                 }
+
+                // https://developers.google.com/fusiontables/docs/v2/upload
                 request.open(
                     'POST', 
                     'https://www.googleapis.com/upload/fusiontables/v2/tables/import'
-                    // 'https://www.googleapis.com/fusiontables/v2/tables/import' 
-                    // 'https://www.googleapis.com/upload/upload/fusiontables/v2/tables/import'
                     + '?uploadType=media'
-                    + '&name=' + Config.fusion.sheetNameStem + (tableNumber++)
+                    + '&name=' + name
                     + '&' + authString()
                 );
                 request.setRequestHeader('content-type', 'application/octet-stream');
-                request.send( indexPath );
+                request.send( path );
+            } );
+        };
+
+        var page5 = function () {
+            console.log('page 5: ', window.wizard.indexRes);
+            var promisesAllDone = [];
+            window.wizard.indexRes.indexes.forEach( (path, i) => {
+                console.log('data length', window.wizard.indexRes.length);
+                promisesAllDone.push(
+                    publishFusionTable(path, Config.fusion.sheetNameStem + i)
+                );
+            });
+            Promise.all( promisesAllDone ).then( () => {
+                window.wizard.nextPage();
             });
         }
 
