@@ -16,7 +16,7 @@
         <link rel="stylesheet" href="css/normalize.css">
         <link rel="stylesheet" href="css/main.css">
         <script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/2.3.0/mustache.min.js"></script>
-
+        
         <script>
         var Config = {
             apikey: 'AIzaSyDAdOILIN2SPM_1iPKJMbHd9jOck8H9J7o',
@@ -24,19 +24,15 @@
             scopes: 'https://www.googleapis.com/auth/fusiontables',
             fusion: {
                 name: 'lee-dev',
-                countiesTableId: '1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV'
+                countiesTableId: '1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV',
+                sheetNameStem: 'lee-dev-',
             },
             endpoints: {
                 uploadSkus: '/cgi-bin/upload-skus.cgi'
             }
         };
 
-
-        var handleClientLoad = function () {
-            checkAuth();
-        };
-
-        var checkAuth = function () {
+        var checkAuthorisation = function () {
             gapi.auth.authorize({
                 client_id: Config.clientId,
                 scope: Config.scopes,
@@ -51,8 +47,7 @@
                 window.wizard.nextPage();
             } else {
                 // No access token could be retrieved, show the button to start the authorization flow.
-                authButton.style.display = 'block';
-                authButton.addEventListener('click', checkAuth);
+                authButton.addEventListener('click', checkAuthorisation);
             }
         };
 
@@ -102,7 +97,7 @@
                 if (request.readyState === XMLHttpRequest.DONE) {
                     if (request.responseText.indexOf('Software error') === -1) {
                         console.log('-------------ok------------\n', request.responseText, '--------------------------');
-                        window.wizard.geoSkuData = request.responseText;
+                        window.wizard.indexRes = JSON.parse(request.responseText);
                         window.wizard.nextPage();
                     } else {
                         console.error('Error:', request.responseText);
@@ -117,51 +112,55 @@
 
         // https://developers.google.com/fusiontables/docs/v2/upload
         var page5 = function () {
-            console.log('page 5');
-            console.log('data length', window.wizard.geoSkuData.length);
-            var request = new XMLHttpRequest();
-            request.onreadystatechange = () => {
-                console.log('request.readyState', request.readyState, XMLHttpRequest.DONE);
-                if (request.readyState === XMLHttpRequest.DONE) {
-                    window.wizard.nextPage(2); // Show a list of uploaded files 
+            console.log('page 5: ', window.wizard.indexRes);
+            var tableNumber = 0;
+            window.wizard.indexRes.indexes.forEach( indexPath => {
+                console.log('data length', window.wizard.indexRes.length);
+                var request = new XMLHttpRequest();
+                request.onreadystatechange = () => {
+                    console.log('request.readyState %s vs %s', request.readyState, XMLHttpRequest.DONE);
+                    if (request.readyState === XMLHttpRequest.DONE) {
+                        console.log( request.responseText );
+                        // window.wizard.nextPage(2); // Show a list of uploaded files 
+                    }
                 }
-            }
-            request.open(
-                'POST', 
-                'https://www.googleapis.com/upload/fusiontables/v2/tables/import'
-                // 'https://www.googleapis.com/fusiontables/v2/tables/import' 
-                // 'https://www.googleapis.com/upload/upload/fusiontables/v2/tables/import'
-                + '?uploadType=media'
-                + '&name=Testing'  
-                + '&' + authString()
-            );
-            request.setRequestHeader('content-type', 'application/octet-stream');
-            request.send(window.wizard.geoSkuData);
+                request.open(
+                    'POST', 
+                    'https://www.googleapis.com/upload/fusiontables/v2/tables/import'
+                    // 'https://www.googleapis.com/fusiontables/v2/tables/import' 
+                    // 'https://www.googleapis.com/upload/upload/fusiontables/v2/tables/import'
+                    + '?uploadType=media'
+                    + '&name=' + Config.fusion.sheetNameStem + (tableNumber++)
+                    + '&' + authString()
+                );
+                request.setRequestHeader('content-type', 'application/octet-stream');
+                request.send( indexPath );
+            });
         }
 
         var page6 = function () {
-            console.log('page 6 - request a merge of ', window.wizard.tableId);
-            var data = new FormData;
-            data.append('tableId', window.wizard.tableId);
-            data.append('countiesTableId', Config.fusion.countiesTableId);
-            var request = new XMLHttpRequest();
-            request.onreadystatechange = () => {
-                console.log('request.readyState', request.readyState, XMLHttpRequest.DONE);
-                if (request.readyState === XMLHttpRequest.DONE) {
-                    console.log( request.responseText );
-                }
-            }
-            request.open(
-                'POST', 
-                'https://www.googleapis.com/upload/fusiontables/v2/tables/import'
-                // 'https://www.googleapis.com/fusiontables/v2/tables/import' 
-                // 'https://www.googleapis.com/upload/upload/fusiontables/v2/tables/import'
-                + '?uploadType=media'
-                + '&name=Testing'  
-                + '&' + authString()
-            );
-            request.setRequestHeader('content-type', 'application/octet-stream');
-            request.send(data);
+            // console.log('page 6 - request a merge of ', window.wizard.tableId);
+            // var data = new FormData;
+            // data.append('tableId', window.wizard.tableId);
+            // data.append('countiesTableId', Config.fusion.countiesTableId);
+            // var request = new XMLHttpRequest();
+            // request.onreadystatechange = () => {
+            //     console.log('request.readyState', request.readyState, XMLHttpRequest.DONE);
+            //     if (request.readyState === XMLHttpRequest.DONE) {
+            //         console.log( request.responseText );
+            //     }
+            // }
+            // request.open(
+            //     'POST', 
+            //     'https://www.googleapis.com/upload/fusiontables/v2/tables/import'
+            //     // 'https://www.googleapis.com/fusiontables/v2/tables/import' 
+            //     // 'https://www.googleapis.com/upload/upload/fusiontables/v2/tables/import'
+            //     + '?uploadType=media'
+            //     + '&name=Testing'  
+            //     + '&' + authString()
+            // );
+            // request.setRequestHeader('content-type', 'application/octet-stream');
+            // request.send(data);
         }
 
         var Wizard = function (access_token) {
@@ -174,14 +173,29 @@
             this.el.pageNumber.setAttribute('style', 'display:block"');
         }
 
+        /**
+         * Show a numbered page that also has data-name attribute that equates to the passed pageName argument
+         * 
+         * @param {string} pageName - string matching an element's `data-name` attribute.
+         * @returns void
+         */
         Wizard.prototype.gotoPageName = function (pageName) {
             console.log('Wizard ', this, 'Page ', this.page, 'to', pageName);
-            // find element with attribute data-name === pageName
             this.nextPage(
                 document.querySelector('script[type="text/mustache"][data-name="merge"]').id.match(/^page-(\d+)$/)[1]
             );
         }
 
+        /**
+         * Hides the current page, and processes and shows the template for the element
+         * for the page element whose * `id` attribute matches 
+         * the prefix `page-` suffixed with the incremented page number. If a function
+         * exists matching the suffix `page` with the prefix of the page number, it 
+         * will be called after the template has been processed and displayed.
+         * 
+         * @param {number} [pageNumber] - Optional page number to which to jump.
+         * @return void
+         */
         Wizard.prototype.nextPage = function (pageNumber) {
             console.log('Wizard ', this, 'Page ', this.page, 'to', this.page + 1);
             if (pageNumber) {
@@ -206,7 +220,11 @@
         }
        </script>
 
-        <script type='text/mustache' id='page-1'>Skipping this page....</script>
+        <script type='text/mustache' id='page-1'>
+            <p>
+                <button id='authButton' name='authButton'>Log In</button>
+            </p>
+        </script>
 
         <script type='text/mustache' id='page-2'>
             <div id='selectCsv'>
@@ -237,11 +255,11 @@
         </script>
 
         <script type='text/mustache' id='page-4'>
-            Talking to the server....
+            <p>Formatting data to upload to Google .... please wait.</p>
         </script>
 
         <script type='text/mustache' id='page-5'>
-            <p>{{window.wizard.geoSkuData}}</p>
+            <p>{{window.wizard}}</p>
             <p>See https://www.googleapis.com/drive/v2 /files /files/$fileid </p>
             <p>Merge with https://drive.google.com/open?id=1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV</p>
         </script>
@@ -250,7 +268,6 @@
             Merging the two files....
         </script>
 
-        <script type="text/javascript" src="https://apis.google.com/js/client.js?onload=handleClientLoad"></script>
     </head>
     <body>
         <!--[if lte IE 9]>
@@ -260,8 +277,16 @@
         <header>
             <h1>Map Updater <span id='pageNumber'>1</span></h1>
         </header>
+
         <main id='main'>
-            Authorising with Google....
+            <p>
+                We have too much data to fit into a single Fusion table, so this
+                app creates several tables and an index which is referenced by
+                the map pages.
+            </p>
+            <p>
+                Authorising with Google....
+            </p>
         </main>
 
 
@@ -272,5 +297,7 @@
         </script> 
         <script src="https://www.google-analytics.com/analytics.js" async defer></script>
         -->
+
+        <script src="https://apis.google.com/js/client.js?onload=checkAuthorisation"></script>
     </body>
 </html>

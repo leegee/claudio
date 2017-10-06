@@ -33,8 +33,6 @@ main();
 exit;
 
 sub main {
-    print "Content-type: text/csv\r\n\r\n";
-
     my $cgi = CGI->new;
     my $IN  = $cgi->upload('skus-csv');
     if (! defined $IN) {
