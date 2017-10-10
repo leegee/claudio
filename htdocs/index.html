@@ -33,6 +33,18 @@
             }
         };
 
+        window.addEventListener('error', function (e, source, lineno, colno, error) {
+            alert(error.toString())
+            var ul = document.getElementById('debug_log');
+            if (! ul) {
+                ul = document.createElement('ul');
+                document.appendChild(ul);
+            }
+            var li = document.createElement('li');
+            ul.appendChild(li);
+            li.innerText = error;
+        });
+
         var checkAuthorisation = function () {
             gapi.auth.authorize({
                 client_id: Config.clientId,
@@ -48,7 +60,7 @@
                 window.wizard.nextPage();
             } else {
                 // No access token could be retrieved, show the button to start the authorization flow.
-                authButton.addEventListener('click', checkAuthorisation);
+                document.getElementById('authButton').addEventListener('click', checkAuthorisation);
             }
         };
 

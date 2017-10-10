@@ -1,28 +1,55 @@
 var fs = require('fs');
-var expect = 'chai.expect';
+var chai = require('chai');
+var expect = chai.expect;
 
 require('../.env.js');
 var TestConfig = require('./TestConfig.js');
 
-module.exports = {
-    'Test Env': function (browser) {
-        expect(process.env.IZEL_GMAIL_USER).not.to.be.an('undefined');
-        expect(process.env.IZEL_GMAIL_PASS).not.to.be.an('undefined');
-        expect(fs.existsSync(TestConfig.input.skus.small)).to.be.true;
-        browser.end();
-    },
-    'Main': function (browser) {
-        browser
-            .url('http://localhost')
-            .waitForElementVisible('body', 4000)
-            .waitForElementVisible('input#skus', 30000)
-            .setValue('input#skus', TestConfig.input.skus.small)
-            // .click('button[name=btnG]')
-            // .pause(1000)
-            .assert.containsText('#main', 'Night Watch')
-            .end();
-    }
-};
+describe('Map Updater', function () {
+    before(function (client, done) {
+        done();
+    });
+
+    after(function (client, done) {
+        client.end(function () {
+            done();
+        });
+    });
+
+    afterEach(function (client, done) {
+        done();
+    });
+
+    beforeEach(function (client, done) {
+        done();
+    });
+
+    describe('Test environment', function () {
+        it('has expected env var', function (browser) {
+            expect(process.env.IZEL_GMAIL_USER).not.to.be.an('undefined');
+            expect(process.env.IZEL_GMAIL_PASS).not.to.be.an('undefined');
+            browser.end();
+        });
+        it('has fixtures', function (browser) {
+            expect(fs.existsSync(TestConfig.input.skus.small)).to.be.true;
+            browser.end();
+        });
+    });
+
+    describe('Main', function () {
+        it('runs', function (browser) {
+            browser
+                .url('http://localhost')
+                .waitForElementVisible('body', 4000)
+                .waitForElementVisible('input#skus', 30000)
+                .setValue('input#skus', TestConfig.input.skus.small)
+                // .click('button[name=btnG]')
+                // .pause(1000)
+                .assert.containsText('#main', 'Night Watch')
+                .end();
+        })
+    });
+});
 
 /*
 
