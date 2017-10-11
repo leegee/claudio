@@ -34,11 +34,18 @@ exit;
 
 sub main {
     my $cgi = CGI->new;
-    my $IN  = $cgi->upload('skus-csv');
-    if (! defined $IN) {
-        die 'Missing file field, "skus-csv"';
+    my @missing;
+    if (! defined $cgi->param('skus-text')) {
+        push @missing, 'skus-text';
     }
+    my $IN  = $cgi->upload('skus-file');
+    if (! defined $IN) {
+        push @missing, 'skus-file';
+    }
+    die join(', ', @missing) if @mssing;
     binmode $IN;
+
+    TRACE 'Process skus', $cgi->param('skus-text');
 
     TRACE 'Write uploaded skus to ', $sku_csv;
     open my $OUT,">:utf8", $sku_csv or LOGDIE "$! - $sku_csv";
@@ -64,6 +71,7 @@ sub main {
         county_distributions_path   => $counties,
         stock_skus_path             => $sku_csv,
         output_path	    	        => $merged_geo_skus_dir,
+        include_only_skus           => [ $cgi->param('skus-text').split(/[,\W]+/) ]
     );
     TRACE 'Done  create_fusion_csv_multiple';
 

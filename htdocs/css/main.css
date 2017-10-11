@@ -286,11 +286,21 @@ body {
 header, main {
     background: #DDD;
     padding: 1em;
+    position: relative;
+    overflow: auto;
 }
 
 main {
     padding-bottom: 4em;
-    max-width: 800pt;
+    max-width: 600pt;
+}
+
+@media only screen and (min-width: 801pt) {
+    header, main {
+        width: 600pt;
+        left: -300pt;
+        margin-left: 50%;
+    }
 }
 
 .page {
@@ -312,11 +322,12 @@ header h2 {
 #currentPage::before {
     content: 'Page ';
     vertical-align: super;
-    font-size: 10pt;
+    font-size: 8pt;
     font-weight: 100;
     margin-left: -2em;
 }
 #pageNumber {
+    font-size: 12pt;
     display: inline-block;
     float: right;
     background: skyblue;
