@@ -54,6 +54,8 @@ The latter is a bar-delimited list of SKU|FIPS, one per line:
 
 	SCSC|53007
 
+Also accepts C<include_only_skus>, an array of SKUs to include - all others in the csv will be dropped.
+
 =cut
 
 sub create_fusion_csv_multiple {
