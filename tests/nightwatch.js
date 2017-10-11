@@ -41,6 +41,7 @@ describe('Map Updater', function () {
             browser
                 .url('http://localhost')
                 .waitForElementVisible('body', 4000)
+                .pause(1000000)
                 .waitForElementVisible('input#skus', 30000)
                 .setValue('input#skus', TestConfig.input.skus.small)
                 // .click('button[name=btnG]')

@@ -2,16 +2,14 @@
 <html class="no-js" lang="en">
     <head>
         <meta charset="utf-8">
-        <meta http-equiv="x-ua-compatible" content="ie=edge">
         <title>Map Uploader</title>
 
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="google-signin-client_id" content="837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com">
-        
-        <link rel="manifest" href="site.webmanifest">
+        <meta http-equiv="x-ua-compatible" content="ie=edge">
         <link rel="apple-touch-icon" href="icon.png">
-        <!-- Place favicon.ico in the root directory -->
+        
+        <meta name="google-signin-client_id" content="837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com">
 
         <link rel="stylesheet" href="css/normalize.css">
         <link rel="stylesheet" href="css/main.css">
@@ -33,19 +31,7 @@
             }
         };
 
-        window.addEventListener('error', function (e, source, lineno, colno, error) {
-            alert(error.toString())
-            var ul = document.getElementById('debug_log');
-            if (! ul) {
-                ul = document.createElement('ul');
-                document.appendChild(ul);
-            }
-            var li = document.createElement('li');
-            ul.appendChild(li);
-            li.innerText = error;
-        });
-
-        var checkAuthorisation = function () {
+        var authorise = function () {
             gapi.auth.authorize({
                 client_id: Config.clientId,
                 scope: Config.scopes,
@@ -59,8 +45,10 @@
                 window.wizard = new Wizard( authResult.access_token );
                 window.wizard.nextPage();
             } else {
+                var el = document.getElementById('authButton');
                 // No access token could be retrieved, show the button to start the authorization flow.
-                document.getElementById('authButton').addEventListener('click', checkAuthorisation);
+                el.addEventListener('click', authorise);
+                el.setAttribute('style', 'display:block');
             }
         };
 
@@ -83,7 +71,7 @@
         }
 
         var page2 = function () {
-            document.getElementById('skus').addEventListener('change', function () {
+            document.getElementById('skusCsv').addEventListener('change', function () {
                 window.wizard.file = this.files[0];
                 window.wizard.nextPage();
             }, false);
@@ -200,6 +188,7 @@
                 main: document.getElementById('main'),
                 pageNumber: document.getElementById('pageNumber')
             };
+            this.el.setAttribute('style', 'display:block"');
             this.el.pageNumber.setAttribute('style', 'display:block"');
         }
 
@@ -210,7 +199,7 @@
          * @returns void
          */
         Wizard.prototype.gotoPageName = function (pageName) {
-            console.log('Wizard ', this, 'Page ', this.page, 'to', pageName);
+            console.log('Wizard ', this, ' page ', this.page, ' to named page ', pageName);
             this.nextPage(
                 document.querySelector('script[type="text/mustache"][data-name="merge"]').id.match(/^page-(\d+)$/)[1]
             );
@@ -227,12 +216,13 @@
          * @return void
          */
         Wizard.prototype.nextPage = function (pageNumber) {
-            console.log('Wizard ', this, 'Page ', this.page, 'to', this.page + 1);
             if (pageNumber) {
                 this.page = pageNumber;
             } else {
                 this.page ++;
             }
+            console.log('Wizard ', this, 'Page ', this.page, 'to page number ', this.page);
+
             try {
                 this.el.main.innerHTML = Mustache.render(
                     document.getElementById('page-' + this.page).innerHTML.toString(), 
@@ -242,6 +232,7 @@
             } catch (e) {
                 console.error(e);
             }
+            
             var fn = 'page' + this.page;
             if (typeof window[fn] === 'function') {
                 window[fn]( arguments );
@@ -257,9 +248,13 @@
         </script>
 
         <script type='text/mustache' id='page-2'>
+            <div id='enterSkusToProcess'>
+                <p><label for='skusToProess'>Please enter a list of USDA symbols/SKUs to proceess. Separate mulitple values with spaces and/or commas.</p>
+                <p><textarea id='skusToProcess' name='skusToProcess'></textarea>
+            </div>
             <div id='selectCsv'>
-                <p><label for='skus'>To create a new Fusion Table, select a SKU CSV file from your local machine:</label></p>
-                <p><input type='file' name='skus' id='skus' placeholder='SKUs CSV' type='.csv'></p>
+                <p><label for='skusCsv'>To create a new Fusion Table, select a SKU CSV file from your local machine:</label></p>
+                <p><input type='file' name='skusCsv' id='skusCsv' placeholder='SKUs CSV' type='.csv'></p>
             </div>
             <div id='listFusionTables'>
                 <p>Or choose an existing Fusion Table from this list of tables stored in your Google account:</p>
@@ -317,6 +312,9 @@
             <p>
                 Authorising with Google....
             </p>
+            <p>
+                <button style='display:none' id='authButton' name='authButton'>Log In</button>
+            </p>
         </main>
 
 
@@ -328,6 +326,6 @@
         <script src="https://www.google-analytics.com/analytics.js" async defer></script>
         -->
 
-        <script src="https://apis.google.com/js/client.js?onload=checkAuthorisation"></script>
+        <script src="https://apis.google.com/js/client.js?onload=authorise"></script>
     </body>
 </html>
