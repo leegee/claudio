@@ -14,7 +14,7 @@
         <script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/2.3.0/mustache.min.js"></script>
 
         <meta name="google-signin-client_id" content="837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com">
-      
+
         <script>
         var Config = {
             apikey: 'AIzaSyDAdOILIN2SPM_1iPKJMbHd9jOck8H9J7o',
@@ -40,11 +40,13 @@
         };
 
         var handleAuthResult = function (authResult) {
-            console.log('authResult', authResult);
+            console.log('authResult = ', authResult);
             if (authResult && !authResult.error) {
+                console.log('Authorised!');
                 window.wizard = new Wizard( authResult.access_token );
                 window.wizard.nextPage();
             } else {
+                console.log('Not authorised');
                 var el = document.getElementById('authButton');
                 // No access token could be retrieved, show the button to start the authorization flow.
                 el.addEventListener('click', authorise);
@@ -52,22 +54,24 @@
             }
         };
 
-        var authString = function () {
+        const  authString = function () {
             return 'key=' + Config.apikey + '&access_token=' + window.wizard.access_token;
         };
 
-        var page1 = function () {
-            var request = new XMLHttpRequest();
-            request.onreadystatechange = () => {
-                if (request.readyState === XMLHttpRequest.DONE) {
-                    console.debug(request.responseText);
-                    window.wizard.fusionTableNames = JSON.parse(request.responseText).items;
-                    console.log( window.wizard.fusionTableNames )
-                    window.wizard.nextPage();
-                }
-            };
-            request.open('GET', 'https://www.googleapis.com/fusiontables/v2/tables?' + authString() );
-            request.send();
+        var asyncListTables = async function () {
+            const response = await window.fetch(
+                'https://www.googleapis.com/fusiontables/v2/tables?' + authString(),
+            );
+            return (await response.json()).items;
+        }
+
+        var page1 = async function () {
+            window.wizard.fusionTableDetails = await asyncListTables();
+            window.wizard.nextPage();
+            // .then( (items) => {
+            //     window.wizard.fusionTableDetails = items;
+            //     window.wizard.nextPage();
+            // });
         }
 
         var page2 = function () {
@@ -218,12 +222,9 @@
          * @return void
          */
         Wizard.prototype.nextPage = function (pageNumber) {
-            if (pageNumber) {
-                this.page = pageNumber;
-            } else {
-                this.page ++;
-            }
-            console.log('Wizard ', this, 'Page ', this.page, 'to page number ', this.page);
+            pageNumber = pageNumber || this.page + 1;
+            console.log('Wizard ', this, 'from page', this.page, 'to page number ', pageNumber);
+            this.page = pageNumber;
 
             try {
                 this.el.main.innerHTML = Mustache.render(
@@ -264,9 +265,9 @@
                 <div id='listFusionTables'>
                     <p>Or choose an existing Fusion Table from this list of tables stored in your Google account:</p>
                     <select id='fusionTableIds' name='fusionTableIds'>
-                        {{#wizard.fusionTableNames}}
+                        {{#wizard.fusionTableDetails}}
                             <option value='{{tableId}}'>{{name}} - {{description}}</option>
-                        {{/wizard.fusionTableNames}}
+                        {{/wizard.fusionTableDetails}}
                     </select>
                     <button id='selectFusionTable' name='selectFusionTable'>Choose</button>
                 </fieldset>

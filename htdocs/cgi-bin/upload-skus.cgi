@@ -42,7 +42,7 @@ sub main {
     if (! defined $IN) {
         push @missing, 'skus-file';
     }
-    die join(', ', @missing) if @mssing;
+    die join(', ', @missing) if @missing;
     binmode $IN;
 
     TRACE 'Process skus', $cgi->param('skus-text');
