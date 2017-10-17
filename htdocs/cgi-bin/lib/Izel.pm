@@ -49,16 +49,30 @@ Creates multiple CSVs and a JSON index of which SKU is in
 which CSV, because Fusion Tables only imports small CSVs at
 the time of writing.
 
-Accepts C<sku2latin_path>, C<county_distributions_path>,
-C<output_path>, and C<number_of_output_files>.
+Accepts:
 
-The former is a CSV of SKU,Latin Name.
+=over 4
 
-The latter is a bar-delimited list of SKU|FIPS, one per line:
+=item C<include_only_skus>
 
-	SCSC|53007
+Optional array of SKUs by which to filter. If this option is supplied, SKUs in C<county_distributino_path> 
+that do not match an entry will be ignored.
 
-Also accepts C<include_only_skus>, an array of SKUs to include - all others in the csv will be dropped.
+=item  C<sku2latin_path>
+
+UNUSED - A CSV of C<SKU,Latin> Name.
+
+=item C<county_distributions_path>
+
+A bar-delimited list of SKU|FIPS, one per line: C<CSC|53007>.
+
+=item C<number_of_output_files>.
+
+Defaults to 5.
+
+=item C<output_path>
+
+Directory.
 
 =cut
 
@@ -66,6 +80,10 @@ sub create_fusion_csv_multiple {
 	TRACE "Enter";
 	my $args = ref($_[0])? shift : {@_};
     $args->{number_of_output_files} ||= 5;
+
+	if ($args->{include_only_skus}){
+		$args->{include_only_skus} = { map { $_ => 1 } @{$args->{include_only_skus}} }
+	}
 
 	my $fh_index = -1;
 	my $rows_done = 0;
@@ -79,7 +97,7 @@ sub create_fusion_csv_multiple {
 		# az => {}
 	};
 
-    my $skus = load_sku2latin_from_csv($args);
+    # my $skus = load_sku2latin_from_csv($args);
 
 	open my $IN, "<:encoding(utf8)", $args->{county_distributions_path}
 		or LOGDIE "$! - $args->{county_distributions_path}";
@@ -96,7 +114,7 @@ sub create_fusion_csv_multiple {
 		my ($state_num, $county_num) = $fips =~ (/^(\d{1,2})(\d{3})$/);
 		my $geo_id2 = $fips + 0;
 		# TRACE $geo_id2.'...'.$fips, "\n";
-		if (exists $skus->{$sku}){
+		if ($args->{include_only_skus} and exists $args->{include_only_skus}->{$sku}){
 			++ $rows_done;
 			my $initial = substr $sku,0,1;
 			push @{$az->{$initial}->{$sku}}, $geo_id2;
@@ -301,9 +319,11 @@ sub load_sku2latin_from_csv {
     my $skus = {};
     my $csv_comma = Text::CSV_XS->new ({ binary => 1, auto_diag => 1 });
     INFO "Reading ",$args->{sku2latin_path};
-    open my $IN, "<:encoding(utf8)", $args->{sku2latin_path}
+    
+	open my $IN, "<:encoding(utf8)", $args->{sku2latin_path}
         or LOGDIE "$! - $args->{sku2latin_path}";
-    while (my $row = $csv_comma->getline($IN)) {
+    
+	while (my $row = $csv_comma->getline($IN)) {
         my $sku = uc $row->[0];
         $sku =~ s/^\s+//;
         $sku =~ s/\s+$//;
