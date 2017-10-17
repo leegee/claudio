@@ -9,10 +9,14 @@ use warnings;
 
 package Izel;
 
+use LWP::UserAgent();
 use Encode;
-use JSON::Any;
 use Log::Log4perl ':easy';
 use Text::CSV_XS;
+
+use JSON::Any;
+my $Jsoner = JSON::Any->new;
+my $UA;
 
 # The CSV is the list of SKUs that are in stock
 sub skus_from_csv {
@@ -45,7 +49,7 @@ Creates multiple CSVs and a JSON index of which SKU is in
 which CSV, because Fusion Tables only imports small CSVs at
 the time of writing.
 
-Accepts C<stock_skus_path>, C<county_distributions_path>,
+Accepts C<sku2latin_path>, C<county_distributions_path>,
 C<output_path>, and C<number_of_output_files>.
 
 The former is a CSV of SKU,Latin Name.
@@ -69,12 +73,13 @@ sub create_fusion_csv_multiple {
 
 	my $res = {
 		skus2tableIndex => {},
-		indexes => [],
+		csvs => [],
+		fusiontables => [],
 		# rows_done => 0,
 		# az => {}
 	};
 
-    my $skus = load_stock_skus_from_csv($args);
+    my $skus = load_sku2latin_from_csv($args);
 
 	open my $IN, "<:encoding(utf8)", $args->{county_distributions_path}
 		or LOGDIE "$! - $args->{county_distributions_path}";
@@ -90,7 +95,7 @@ sub create_fusion_csv_multiple {
 		my $fips = $row->[1];
 		my ($state_num, $county_num) = $fips =~ (/^(\d{1,2})(\d{3})$/);
 		my $geo_id2 = $fips + 0;
-		DEBUG $geo_id2.'...'.$fips, "\n";
+		# TRACE $geo_id2.'...'.$fips, "\n";
 		if (exists $skus->{$sku}){
 			++ $rows_done;
 			my $initial = substr $sku,0,1;
@@ -100,7 +105,7 @@ sub create_fusion_csv_multiple {
 	close $IN;
 
 	my $csv_comma = Text::CSV_XS->new ({ binary => 1, auto_diag => 1 });
-    $csv_comma->eol ("\n");
+    $csv_comma->eol("\n");
 
 	my @keys = sort {
 		scalar keys %{$az->{$b}}
@@ -114,13 +119,41 @@ sub create_fusion_csv_multiple {
 	my ($dir, $ext) = $args->{output_path} =~ /^(.+?)(\.[^.]+)?$/;
 	$res->{dir} = $dir;
 	mkdir $dir or die "$! - $dir";
-	my @OUT;
+	
+	my (@OUT, $fh);
+
 	for my $i (0 .. $args->{number_of_output_files} -1){
-		my $path = $dir .'/'. $i . '.csv';
-		open my $fh, ">:encoding(utf8)", $path or die "$! - $path";
-		print $fh "GEO_ID2, SKU\n";
+		my $pathCsv = $dir .'/'. $i . '.csv';
+		push @{$res->{csvs}}, $pathCsv;
+		my $name = 'table_' . $i;
+
+		publish_table_to_google({
+			name => $name,
+			auth_string => $args->{auth_string},
+			table => {
+				name => $name,
+				isExportable => 'true',
+				description => 'Table ' . $i,
+				columns => [ 
+					{
+						name => "GEO_ID2",
+						type => "STRING",
+						kind => "fusiontables#column",
+						columnId => 1
+					},
+					{
+						name => "SKU",
+						type => "STRING",
+						kind => "fusiontables#column",
+						columnId => 2
+					},
+				]
+			}
+		});
+		
+		open $fh, ">:encoding(utf8)", $pathCsv or die "$! - $pathCsv";
 		push @OUT, $fh;
-		push @{$res->{indexes}}, $path;
+		print $fh "GEO_ID2,SKU\n";
 	}
 
 	while (@keys){
@@ -141,14 +174,16 @@ sub create_fusion_csv_multiple {
 				]);
 			}
 		}
+
+		# Terminate JSON
+		print $fh "]\n";
 	}
 
 	close $_ foreach @OUT;
 
 	INFO "Create $dir/index.js";
-	open my $fh, ">:encoding(utf8)", "$dir/index.js" or die "$! - $dir/index.js";
-	my $jsoner = JSON::Any->new;
-	my $jsonRes = $jsoner->encode( $res );
+	open $fh, ">:encoding(utf8)", "$dir/index.js" or die "$! - $dir/index.js";
+	my $jsonRes = $Jsoner->encode( $res );
 	print $fh $jsonRes;
 	close $fh;
 
@@ -156,6 +191,35 @@ sub create_fusion_csv_multiple {
 	return $jsonRes;
 }
 
+
+sub publish_table_to_google {
+    TRACE "Enter";
+    my $args = ref($_[0])? shift : {@_};
+    my $body = $Jsoner->encode($args);
+
+	if (!$UA){
+		$UA = LWP::UserAgent->new;
+		$UA->timeout(30);
+		$UA->env_proxy;
+	}
+
+    my $url = 'https://www.googleapis.com/fusiontables/v2/tables'
+		. '?uploadType=media'
+		. '&name=' . $args->{name}
+		. '&' . $args->{auth_string},
+
+	my $response = $UA->post(
+		'http://search.cpan.org/', 
+		Content => $Jsoner->encode($args->{table})
+	);
+
+	if ($response->is_success) {
+		print $response->decoded_content;  # or whatever
+	}
+	else {
+		die $response->status_line;
+	}
+}
 
 =head2 (METHOD) create_fusion_csv
 
@@ -229,13 +293,13 @@ sub create_fusion_csv {
 }
 
 
-sub load_stock_skus_from_csv {
+sub load_sku2latin_from_csv {
     my $args = shift;
     my $skus = {};
     my $csv_comma = Text::CSV_XS->new ({ binary => 1, auto_diag => 1 });
-    INFO "Reading ",$args->{stock_skus_path};
-    open my $IN, "<:encoding(utf8)", $args->{stock_skus_path}
-        or LOGDIE "$! - $args->{stock_skus_path}";
+    INFO "Reading ",$args->{sku2latin_path};
+    open my $IN, "<:encoding(utf8)", $args->{sku2latin_path}
+        or LOGDIE "$! - $args->{sku2latin_path}";
     while (my $row = $csv_comma->getline($IN)) {
         my $sku = uc $row->[0];
         $sku =~ s/^\s+//;

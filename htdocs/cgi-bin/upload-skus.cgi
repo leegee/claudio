@@ -14,7 +14,7 @@ use Izel;
 
 Log::Log4perl->easy_init({
     file => 'C:/Users/User/src/izel/htdocs/cgi.log',
-    level => DEBUG
+    level => $TRACE
 });
 
 TRACE 'Init';
@@ -22,6 +22,7 @@ TRACE 'Init';
 $CGI::POST_MAX = 1024 * 10000;
 $CGI::DISABLE_UPLOADS = 0; 
 $| = 1;
+
 
 my $sku_csv     = 'latest_skus.csv';
 my $counties	= 'data/county_distrib_11-19-09.txt';
@@ -34,6 +35,9 @@ exit;
 
 sub main {
     my $cgi = CGI->new;
+
+    my $auth_string = $ENV{QUERY_STRING};
+
     my @missing;
     if (! defined $cgi->param('skus-text')) {
         push @missing, 'skus-text';
@@ -45,7 +49,7 @@ sub main {
     die join(', ', @missing) if @missing;
     binmode $IN;
 
-    TRACE 'Process skus', $cgi->param('skus-text');
+    TRACE 'Process skus' . ($cgi->param('skus-text') || '');
 
     TRACE 'Write uploaded skus to ', $sku_csv;
     open my $OUT,">:utf8", $sku_csv or LOGDIE "$! - $sku_csv";
@@ -61,21 +65,21 @@ sub main {
     
 # my ($row_count, $skus_count, $path) = Izel::Init::create_fusion_csv_multiple(
 # 	county_distributions_path => $counties,
-# 	stock_skus_path => $sku,
+# 	sku2latin_path => $sku,
 # 	output_path		=> $output,
 #     number_of_output_files => $number_of_output_files,
 # );
 
     TRACE 'Call create_fusion_csv_multiple';
+    my $skus = $cgi->param('skus-text')? [$cgi->param('skus-text').split(/[,\W]+/)] : [];
     my $jsonRes = Izel::create_fusion_csv_multiple(
-        county_distributions_path   => $counties,
-        stock_skus_path             => $sku_csv,
+        auth_string                 => $auth_string,
+        county_distributions_path   => $sku_csv, # $counties,
+        # sku2latin_path              => 
         output_path	    	        => $merged_geo_skus_dir,
-        include_only_skus           => [ $cgi->param('skus-text').split(/[,\W]+/) ]
+        include_only_skus           => $skus
     );
     TRACE 'Done  create_fusion_csv_multiple';
-
-    warn Dumper $jsonRes;
 
     # TRACE 'Reading merged_path, ', $merged_path;
     # open $IN, $merged_path or die "$! - $merged_path";
@@ -91,3 +95,4 @@ sub main {
     # print "Content-type: application/json\r\n\r\n{\"path\":\"$merged_path\"}\n\r";
     print "Content-type: application/json\r\n\r\n", $jsonRes;
 }
+
