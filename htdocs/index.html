@@ -113,46 +113,50 @@
                     console.error('Not ready', request.readyState);
                 }
             }
-            request.open('POST', Config.endpoints.uploadSkus);
+            request.open('POST', Config.endpoints.uploadSkus + '?' + authString());
             request.send(data);
         }
 
-        var publishFusionTable = function (path, name, retries) {
-            retries = retries || 0;
-            return new Promise( (resolve, reject) => {
-                var request = new XMLHttpRequest();
-                request.onreadystatechange = () => {
-                    console.log('request.readyState %s vs %s', request.readyState, XMLHttpRequest.DONE);
-                    if (request.readyState === XMLHttpRequest.DONE) {
-                        console.log( request.responseText );
-                        var res = JSON.parse( request.responseText );
-                        if (res.error && retries < Config.fusion.maxRetries) {
-                            publishFusionTable( path, name, ++retries ); // , tries );
-                            console.error('Retry ', retries);
-                        } else {
-                            resolve();
-                        }
-                    }
-                }
 
-                // https://developers.google.com/fusiontables/docs/v2/upload
-                request.open(
-                    'POST', 
-                    'https://www.googleapis.com/upload/fusiontables/v2/tables/import'
-                    + '?uploadType=media'
-                    + '&name=' + name
-                    + '&' + authString()
-                );
-                request.setRequestHeader('content-type', 'application/octet-stream');
-                request.send( path );
-            } );
+        var publishFusionTable = async function (path, name, retries) {
+            retries = retries || 0;
+            console.log('Will call ');
+            var form = new FormData();
+            form.append('file', path);
+
+/*
+            return await window.fetch('https://www.googleapis.com/fusiontables/v2/tables'
+                + '?uploadType=media'
+                + '&name=' + name
+                + '&' + authString(),
+                {
+                    method: 'POST',
+                    headers: new Headers({'content-type': 'application/octet-stream'}),
+                    body: form
+                }
+            ).then( (response) => {
+                var res = response.json();
+                console.log(res);
+                if (res.error && retries < Config.fusion.maxRetries) {
+                    publishFusionTable( path, name, ++retries ); // , tries );
+                    console.error('Retry ', retries);
+                } else {
+                    // populateFusionTable({ 
+                    //     res: res,
+                    //     name: name,
+                    //     path: path
+                    // });
+                }
+            })
+*/
         };
+
 
         var page5 = function () {
             console.log('page 5: ', window.wizard.indexRes);
             var promisesAllDone = [];
-            window.wizard.indexRes.indexes.forEach( (path, i) => {
-                console.log('data length', window.wizard.indexRes.length);
+            window.wizard.indexRes.fusiontables.forEach( (path, i) => {
+                console.log('Publish table', i, path);
                 promisesAllDone.push(
                     publishFusionTable(path, Config.fusion.sheetNameStem + i)
                 );
