@@ -160,6 +160,7 @@ sub create_fusion_csv_multiple {
 		$fh_index ++;
 		$fh_index = 0 if $fh_index >= $args->{number_of_output_files};
 		my $initial = shift @keys;
+
 		INFO sprintf "SKUs initial %s with %s into %s",
 			$initial, scalar( keys %{ $az->{$initial} }), $fh_index;
 
@@ -206,7 +207,9 @@ sub publish_table_to_google {
     my $url = 'https://www.googleapis.com/fusiontables/v2/tables'
 		. '?uploadType=media'
 		. '&name=' . $args->{name}
-		. '&' . $args->{auth_string},
+		. '&' . $args->{auth_string};
+
+	INFO 'Posting to ', $url;
 
 	my $response = $UA->post(
 		'http://search.cpan.org/', 
@@ -214,10 +217,10 @@ sub publish_table_to_google {
 	);
 
 	if ($response->is_success) {
-		print $response->decoded_content;  # or whatever
+		INFO $response->decoded_content;  # or whatever
 	}
 	else {
-		die $response->status_line;
+		LOGDIE $response->status_line;
 	}
 }
 
