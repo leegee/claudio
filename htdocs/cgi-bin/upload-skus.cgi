@@ -72,6 +72,7 @@ sub main {
 
     TRACE 'Call create_fusion_csv_multiple';
     my $skus = $cgi->param('skus-text')? [$cgi->param('skus-text').split(/[,\W]+/)] : [];
+    
     my $jsonRes = Izel::create_fusion_csv_multiple(
         auth_string                 => $auth_string,
         county_distributions_path   => $sku_csv, # $counties,
