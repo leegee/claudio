@@ -107,9 +107,10 @@ sub update {
 	# Distribute volumes of SKUs across multiple files.
 	# Order output by volume.
 	# Write alternatly to one of several outupt files
-	my ($dir, $ext) = $args->{output_path} =~ /^(.+?)(\.[^.]+)?$/;
-	$res->{dir} = $dir;
-	mkdir $dir or die "$! - $dir";
+	my $dir = $self->get_dir_from_path( $args->{output_path} );
+	if (!-d $dir) {
+		mkdir $dir or die "$! - $dir";
+	}
 	
 	my (@OUT, $fh);
 
@@ -292,6 +293,43 @@ sub skus_from_csv {
 	return @skus;
 }
 
+
+sub load_geo_sku_from_csv {
+	my $self = shift;
+	my $args = ref($_[0])? shift : {@_};
+	$args->{separator} ||= ',';
+	my $count = 0;
+
+	open my $IN, "<:encoding(utf8)", $args->{path}
+		or LOGDIE "$! - $args->{path}";
+
+	my $csv_input = Text::CSV_XS->new({
+		sep_char 	=> $args->{separator},
+		binary 		=> 1,
+		auto_diag 	=> 1
+	});
+
+	while (my $row = $csv_input->getline($IN)) {
+		my $sku  = uc $row->[0];
+		my $fips = $row->[1];
+		die 'FIPS should be numeric' if not $fips =~ /^\d+$/;
+		my $geo_id2 = $fips + 0;
+		if (not($args->{include_only_skus}) or exists $args->{include_only_skus}->{$sku}){
+			$self->insert_geosku( $geo_id2, $sku );
+			$count ++;
+		}
+	}
+	
+	close $IN;
+	return $count;
+}
+
+sub get_dir_from_path {
+	my ($self, $path) = @_;
+	my ($dir, $ext) = $path =~ /^(.+?)(\.[^.]+)?$/;
+	return $dir;
+}	
+
 sub get_dbh {
 	my $self = shift;
 	$self->{dbh} = DBI->connect("dbi:SQLite:dbname=$CONFIG->{db_path}","","");
@@ -326,41 +364,28 @@ sub insert_geosku {
 	return $self->{sth}->{insert_geosku}->execute( $geo_id2, $sku );
 }
 
-
-sub load_geo_sku_from_csv {
-	my $self = shift;
-	my $args = ref($_[0])? shift : {@_};
-	$args->{separator} ||= ',';
-	my $count = 0;
-
-	open my $IN, "<:encoding(utf8)", $args->{path}
-		or LOGDIE "$! - $args->{path}";
-
-	my $csv_input = Text::CSV_XS->new({
-		sep_char 	=> $args->{separator},
-		binary 		=> 1,
-		auto_diag 	=> 1
-	});
-
-	while (my $row = $csv_input->getline($IN)) {
-		my $sku  = uc $row->[0];
-		my $fips = $row->[1];
-		die 'FIPS should be numeric' if not $fips =~ /^\d+$/;
-		my $geo_id2 = $fips + 0;
-		if (not($args->{include_only_skus}) or exists $args->{include_only_skus}->{$sku}){
-			$self->insert_geosku( $geo_id2, $sku );
-			$count ++;
-		}
-	}
-	
-	close $IN;
-	return $count;
-}
-
 sub get_initials {
 	return [
 		map {$_->[0]} shift->{dbh}->selectall_array("SELECT DISTINCT SUBSTR(sku,1,1) FROM  $CONFIG->{geosku_table_name} ORDER BY sku ASC")
 	];
 }
 
+sub sku_to_geo_id2_count {
+	my $self = shift;
+	my $counts = $self->{dbh}->selectall_arrayref(
+		"SELECT COUNT(geo_id2) AS c, SKU FROM $CONFIG->{geosku_table_name} GROUP BY SKU ORDER BY c DESC"
+	);
+
+	my $total = 0;
+	map { $total += $_->[0] } @$counts;
+
+	return {
+		total => $total,
+		counts => { 
+			map { $_->[1] => $_->[0] } @$counts
+		}
+	};
+}
+
 1;
+
