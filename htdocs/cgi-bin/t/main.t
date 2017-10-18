@@ -26,4 +26,17 @@ is $izel->load_geo_sku_from_csv( path => 'data/small.csv'), 18, 'import';
 
 is_deeply $izel->get_initials(), ['A', 'S'], 'Initials';
 
+subtest 'get_dir_from_path' => sub {
+    is $izel->get_dir_from_path('/foo/bar/baz.ext'), '/foo/bar/baz', 'get_dir_from_path with filename';
+    is $izel->get_dir_from_path('/foo/bar/baz'), '/foo/bar/baz', 'get_dir_from_path with path';
+};
+
+is_deeply $izel->sku_to_geo_id2_count, {
+    'total' => 18,
+    'counts' => {
+        'ARTHR' => 14,
+        'SCSC' => 4
+    }
+}, 'sku_to_geo_id2_count';
+
 done_testing();
