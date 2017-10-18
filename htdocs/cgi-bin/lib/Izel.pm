@@ -373,6 +373,7 @@ sub get_initials {
 
 sub distribute_for_fusion_tables {
 	my $self = shift;
+	my $fusion_table_limit = shift || $FUSION_TABLE_LIMIT;
 	my $counts = $self->{dbh}->selectall_arrayref(
 		"SELECT COUNT(geo_id2) AS c, SKU FROM $CONFIG->{geosku_table_name} GROUP BY SKU ORDER BY c DESC"
 	);
@@ -386,7 +387,7 @@ sub distribute_for_fusion_tables {
 	my $table_index = 0;
 
 	foreach my $record (@$counts) {
-		if ($tables->[$table_index]->{count} + $record->[0] > $FUSION_TABLE_LIMIT) {
+		if ($tables->[$table_index]->{count} + $record->[0] > $fusion_table_limit) {
 			$table_index ++;
 			$tables->[$table_index] = Table->new();
 		}
