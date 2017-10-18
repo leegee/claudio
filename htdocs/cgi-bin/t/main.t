@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-
+use Data::Dumper;
 use Test::More;
 use Test::Exception;
 
@@ -11,7 +11,6 @@ my $izel = Izel->new;
 isa_ok($izel, 'Izel');
 
 subtest 'DB init' => sub {
-    plan tests => 5;
     unlink $Izel::CONFIG->{db_path} if -e $Izel::CONFIG->{db_path};
 
     lives_ok { $izel->get_dbh } 'Got DBH';
@@ -22,5 +21,9 @@ subtest 'DB init' => sub {
     lives_ok { $izel->get_dbh } 'Got DBH';
     is $stat, join('',  stat $Izel::CONFIG->{db_path}), 'Did not overwrite existing db';
 };
+
+is $izel->load_geo_sku_from_csv( path => 'data/small.csv'), 18, 'import';
+
+is_deeply $izel->get_initials(), ['A', 'S'], 'Initials';
 
 done_testing();
