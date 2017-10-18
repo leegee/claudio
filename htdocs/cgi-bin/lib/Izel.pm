@@ -11,7 +11,8 @@ use Text::CSV_XS;
 use DBI;
 
 use JSON::Any;
-my $TOTAL_COUNTIES_IN_USA = 3007;
+my $TOTAL_COUNTIES_IN_USA = 3_007;
+my $FUSION_TABLE_LIMIT = 100_000;
 
 our $CONFIG = {
 	geosku_table_name => 'geosku',
@@ -370,7 +371,7 @@ sub get_initials {
 	];
 }
 
-sub sku_to_geo_id2_count {
+sub distribute_for_fusion_tables {
 	my $self = shift;
 	my $counts = $self->{dbh}->selectall_arrayref(
 		"SELECT COUNT(geo_id2) AS c, SKU FROM $CONFIG->{geosku_table_name} GROUP BY SKU ORDER BY c DESC"
@@ -379,13 +380,43 @@ sub sku_to_geo_id2_count {
 	my $total = 0;
 	map { $total += $_->[0] } @$counts;
 
-	return {
-		total => $total,
-		counts => { 
-			map { $_->[1] => $_->[0] } @$counts
+	my $tables = [
+		Table->new()
+	];
+	my $table_index = 0;
+
+	foreach my $record (@$counts) {
+		if ($tables->[$table_index]->{count} + $record->[0] > $FUSION_TABLE_LIMIT) {
+			$table_index ++;
+			$tables->[$table_index] = Table->new();
 		}
+		$tables->[$table_index]->add( 
+			count => $record->[0],
+			sku => $record->[1],
+		);
+	}
+	
+	return {
+		tables => $tables,
+		total => $total,
 	};
 }
 
 1;
 
+package Table;
+
+sub new {
+	return bless { 
+		count => 0, 
+		skus => []
+	};
+}
+
+sub add {
+	my ($self, $args) = (shift, ref($_[0])? shift : {@_} );
+	$self->{count} += $args->{count};
+	push @{ $self->{skus} }, $args->{sku};
+}
+
+1;

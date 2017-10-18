@@ -31,12 +31,18 @@ subtest 'get_dir_from_path' => sub {
     is $izel->get_dir_from_path('/foo/bar/baz'), '/foo/bar/baz', 'get_dir_from_path with path';
 };
 
-is_deeply $izel->sku_to_geo_id2_count, {
-    'total' => 18,
-    'counts' => {
-        'ARTHR' => 14,
-        'SCSC' => 4
-    }
-}, 'sku_to_geo_id2_count';
+
+is_deeply $izel->distribute_for_fusion_tables, {
+    'tables' => [
+        bless( {
+            'skus' => [
+                'ARTHR',
+                'SCSC'
+            ],
+            'count' => 18
+        }, 'Table' )
+    ],
+    'total' => 18
+}, 'distribute_for_fusion_tables';
 
 done_testing();
