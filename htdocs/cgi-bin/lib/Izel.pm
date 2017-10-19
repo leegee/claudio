@@ -8,7 +8,8 @@ use Log::Log4perl ':easy';
 sub require_defined_fields {
 	my ($self, @fields) = @_;
 	my @missing = grep {
-		not (exists $self->{$_} || defined $self->{$_}) 
+		not exists $self->{$_} 
+		or not defined $self->{$_}
 	} @fields;
 	LOGCONFESS 'Missing fields: ' . join(', ', @missing) . "\nin " . Dumper($self) if @missing;
 }
@@ -17,13 +18,10 @@ package Izel;
 use base 'IzelBase';
 use File::Temp ();
 use Data::Dumper;
-use LWP::UserAgent();
 use Encode;
 use Log::Log4perl ':easy';
-use Text::CSV_XS;
 use DBI;
 
-use JSON::Any;
 my $TOTAL_COUNTIES_IN_USA = 3_007;
 my $FUSION_TABLE_LIMIT = 100_000;
 
@@ -43,12 +41,7 @@ sub new {
 	my $self = {
 		%$args,
 		sth		=> {},
-		ua		=> LWP::UserAgent->new,
-		jsoner	=> JSON::Any->new,
 	};
-
-	$self->{ua}->timeout(30);
-	$self->{ua}->env_proxy;
 
 	if ($self->{auth_string} and not $self->{auth_token}) {
 		($self->{auth_token}) = $self->{auth_string} =~ /access_token=([^&;]+)/;
@@ -139,76 +132,6 @@ sub update {
 
 	return $jsonRes;
 }
-
-sub add_rows_to_google {
-	TRACE "Enter";
-	my $self = shift;
-	my $args = ref($_[0])? shift : {@_};
-
-    my $url = 'https://www.googleapis.com/fusiontables/v2/tables'
-		. '/' . $args->{table_id} . '/import'
-		. '?' . $self->{auth_string};
-
-	INFO "Posting $args->{csv_path} to $url";
-	return $self->_post_blob( $url, $args->{csv_path} );
-}
-
-sub publish_table_to_google {
-    TRACE "Enter";
-	my $self = shift;
-    my $args = ref($_[0])? shift : {@_};
-
-	my $table = {
-		name => $args->{table_name},
-		isExportable => 'true',
-		description => 'Table ' . $args->{table_number},
-		columns => [ 
-			{
-				name => "GEO_ID2",
-				type => "STRING",
-				kind => "fusiontables#column",
-				columnId => 1
-			},
-			{
-				name => "SKU",
-				type => "STRING",
-				kind => "fusiontables#column",
-				columnId => 2
-			},
-		]
-	};
-
-    my $url = 'https://www.googleapis.com/fusiontables/v2/tables'
-		. '?' . $self->{auth_string};
-
-	INFO "Posting '$args->{name}' to $url";
-	my $res = $self->_post_blob( $url, $table );
-	$res->{tableId} = $res->{content}->{tableId};
-	return $res;
-}
-
-sub _post_blob {
-	my ($self, $url, $blob) = @_;
-
-	$self->{ua}->default_header( authorization => $self->{auth_token} ) if $self->{auth_token};
-	$self->{ua}->default_header( 'content-type' => 'application/json' );
-
-	my $response = $self->{ua}->post(
-		$url, 
-		Content => $blob =~ /\n/ ? $self->{jsoner}->encode($blob) : $blob
-	);
-
-	my $res = {};
-
-	if ($response->is_success) {
-		$res->{content} = $self->{jsoner}->decode( $response->decoded_content );
-	} else {
-		$res->{error} = $response->status_line;
-	}
-
-	return $res;
-}
-
 
 sub load_sku2latin_from_csv {
     my $args = shift;
@@ -361,19 +284,19 @@ sub compute_fusion_tables {
 	# my $total = 0;
 	# map { $total += $_->[0] } @$counts;
 
+	my $table_args = {
+		map { $_ => $self->{$_} } qw/ auth_string output_dir /
+	};
+
 	my $tables = [
-		Table->new( 
-			dir => $self->{output_dir}
-		)
+		Table->new( $table_args )
 	];
 	my $table_index = 0;
 
 	foreach my $record (@$counts) {
 		if ($tables->[$table_index]->{count} + $record->[0] > $fusion_table_limit) {
 			$table_index ++;
-			$tables->[$table_index] = Table->new( 
-				dir => $self->{output_dir}
-			);
+			$tables->[$table_index] = Table->new( $table_args );
 		}
 		$tables->[$table_index]->add( 
 			count => $record->[0],
@@ -388,6 +311,8 @@ sub compute_fusion_tables {
 
 package Table;
 use base 'IzelBase';
+use LWP::UserAgent();
+use JSON::Any;
 use Log::Log4perl ':easy';
 use File::Temp ();
 use Text::CSV_XS;
@@ -405,12 +330,18 @@ sub new {
 	$TABLES_CREATED ++;
 	my $self = {
 		%$args,
+		jsoner	=> JSON::Any->new,
+		ua		=> LWP::UserAgent->new,
 		count => 0, 
 		skus => [],
 		index_number => exists($args->{index_number}) ? $args->{index_number} : ($TABLES_CREATED),
-		dir => $args->{dir} || File::Temp::tempdir( CLEANUP => 0 ),
+		output_dir => $args->{output_dir} || File::Temp::tempdir( CLEANUP => 0 ),
 	};
+
+	$self->{ua}->timeout(30);
+	$self->{ua}->env_proxy;
 	$self->{name} = $args->{name} || 'Table #' . $self->{index_number};
+
 	$self = bless $self, ref($inv) ? ref($inv) : $inv;
 	return $self;
 }
@@ -427,21 +358,20 @@ sub create {
 	$self->{index_number} = $args->{index_number};
 	$self->{name} = 'Table #' . $self->{index_number};
 
-	my $create_res = $self->publish_table_to_google({
-		table_name => $self->{name},
-		table_number => $self->{index_number},
-	});
+	my $path = $self->_create_file;
 
-	$self->_create_file;
+	my $create_res = $self->_publish_table_to_google(
+		csv_path => $path,
+	);
 }
 
 sub _create_file {
 	TRACE 'Enter _create_file with ' ,join' ', @_;
 	my ($self, $obj_w_dbh, $get_geoid2s_for_sku) = @_;
 
-	$self->require_defined_fields('dir', 'index_number');
+	$self->require_defined_fields('output_dir', 'index_number');
 
-	my $path = $self->{dir} .'/'. $self->{index_number} . '.csv';
+	my $path = $self->{output_dir} .'/'. $self->{index_number} . '.csv';
 	open my $FH, ">:encoding(utf8)", $path or die "$! - $path";
 
 	$FH->print("GEO_ID2,SKU,\n");
@@ -454,8 +384,88 @@ sub _create_file {
 	}
 
 	TRACE 'Wrote ', $path;
-
 	return $path;
+}
+
+sub _publish_table_to_google {
+    TRACE "Enter";
+	my $self = shift;
+    my $args = ref($_[0])? shift : {@_};
+	LOGDIE 'No path arg' if not $args->{path};
+	$self->require_defined_fields(qw/ auth_string index_number name /);
+
+	my $table = {
+		name => $self->{name},
+		isExportable => 'true',
+		description => 'Table ' . $self->{index_number},
+		columns => [ 
+			{
+				name => "GEO_ID2",
+				type => "STRING",
+				kind => "fusiontables#column",
+				columnId => 1
+			},
+			{
+				name => "SKU",
+				type => "STRING",
+				kind => "fusiontables#column",
+				columnId => 2
+			},
+		]
+	};
+
+    my $url = 'https://www.googleapis.com/fusiontables/v2/tables'
+		. '?' . $self->{auth_string};
+
+	INFO "Posting '$self->{name}' to $url";
+	my $res = $self->_post_blob( $url, $table );
+	my $table_id = $res->{content}->{tableId};
+
+	$res = add_rows_to_google(
+		csv_path => $args->{csv_path},
+		table_id => $table_id,
+	);
+
+	$res->{tableId} = $table_id;
+
+	INFO Dumper $res;
+
+	return $res;
+}
+
+sub _post_blob {
+	my ($self, $url, $blob) = @_;
+
+	$self->{ua}->default_header( authorization => $self->{auth_token} ) if $self->{auth_token};
+	$self->{ua}->default_header( 'content-type' => 'application/json' );
+
+	my $response = $self->{ua}->post(
+		$url, 
+		Content => $blob =~ /\n/ ? $self->{jsoner}->encode($blob) : $blob
+	);
+
+	my $res = {};
+
+	if ($response->is_success) {
+		$res->{content} = $self->{jsoner}->decode( $response->decoded_content );
+	} else {
+		$res->{error} = $response->status_line;
+	}
+
+	return $res;
+}
+
+sub add_rows_to_google {
+	TRACE "Enter";
+	my $self = shift;
+	my $args = ref($_[0])? shift : {@_};
+
+    my $url = 'https://www.googleapis.com/fusiontables/v2/tables'
+		. '/' . $args->{table_id} . '/import'
+		. '?' . $self->{auth_string};
+
+	INFO "Posting $args->{csv_path} to $url";
+	return $self->_post_blob( $url, $args->{csv_path} );
 }
 
 
