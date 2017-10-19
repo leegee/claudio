@@ -41,9 +41,9 @@ subtest 'get_dir_from_path' => sub {
 
 sub test_dirs {
     foreach (@_) {
-        ok exists $_->{dir}, 'dir field created';
-        ok -d $_->{dir}, 'dir exists';
-        delete $_->{dir};
+        ok exists $_->{output_dir}, 'output_dir field created';
+        ok -d $_->{output_dir}, 'output_dir exists';
+        delete $_->{output_dir};
     }
     return @_;
 }
@@ -90,9 +90,12 @@ subtest 'get_geoid2s_for_sku' => sub {
 
 subtest 'create_fusion_tables' => sub {
     my $tables = $izel->compute_fusion_tables;
-    $tables->[0]->_create_file(
+    my $path = $tables->[0]->_create_file(
         $izel, $izel->can('get_geoid2s_for_sku')
     );
+    ok -e $path, 'Created CSV';
+
+    $tables->[0]->_publish_table_to_google( path => $path );
 };
 
 done_testing();
