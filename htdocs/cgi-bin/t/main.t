@@ -1,5 +1,13 @@
 use strict;
 use warnings;
+
+use Log::Log4perl ':easy';
+Log::Log4perl->easy_init({
+    file => 'STDERR',
+    level => $TRACE
+});
+
+
 use Data::Dumper;
 use Test::More;
 use Test::Exception;
@@ -31,38 +39,53 @@ subtest 'get_dir_from_path' => sub {
     is $izel->get_dir_from_path('/foo/bar/baz'), '/foo/bar/baz', 'with path';
 };
 
-subtest 'distribute_for_fusion_tables' => sub {
-    is_deeply $izel->distribute_for_fusion_tables, {
-        'tables' => [
-            bless( {
-                'skus' => [
-                    'ARTHR',
-                    'SCSC'
-                ],
-                'count' => 18
-            }, 'Table' )
-        ],
-        'total' => 18
-    }, 'massive limit, tiny data: one table';
+sub test_dirs {
+    foreach (@_) {
+        ok exists $_->{dir}, 'dir field created';
+        ok -d $_->{dir}, 'dir exists';
+        delete $_->{dir};
+    }
+    return @_;
+}
 
-    is_deeply $izel->distribute_for_fusion_tables(14), {
-        'tables' => [
-            bless( {
-                'count' => 14,
-                'skus' => [
-                        'ARTHR'
-                    ]
-                }, 'Table' ),
-            bless( {
-                'skus' => [
-                        'SCSC'
-                    ],
-                'count' => 4
-            }, 'Table' )
-        ],
-        'total' => 18
-    }, 'force two tables';
+subtest 'compute_fusion_tables' => sub {
+    @_ = @{ $izel->compute_fusion_tables };
+    @_ = test_dirs(@_);
 
+    is_deeply \@_, [
+        bless( {
+            'skus' => [ 'ARTHR', 'SCSC' ],
+            'count' => 18,
+            'name' => 'Table #0',
+            'index_number' => 0,
+        }, 'Table')
+    ], 'massive limit, tiny data: one table';
+
+    @_ = @{ $izel->compute_fusion_tables(14) };
+    @_ = test_dirs(@_);
+    is_deeply \@_, [
+        bless( {
+            'count' => 14,
+            'skus' => [ 'ARTHR' ],
+            'name' => 'Table #0',
+            'index_number' => 0,
+            }, 'Table' 
+        ),
+        bless( {
+            'count' => 4,
+            'skus' => [ 'SCSC' ],
+            'name' => 'Table #1',
+            'index_number' => 1,
+            }, 'Table' 
+        )
+    ], 'force two tables';
+};
+
+subtest 'create_fusion_tables' => sub {
+    my $tables = $izel->compute_fusion_tables;
+    $tables->[0]->_create_file(
+        $izel->can('get_geoid2s_for_sku')
+    );
 };
 
 done_testing();

@@ -23,8 +23,7 @@ $CGI::DISABLE_UPLOADS = 0;
 
 my $UPLOADED_SKU_CSV = 'latest_skus.csv';
 
-my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
-my $merged_geo_skus_dir = sprintf "temp/skus_%d%02d%02d-%02d%02d%02d/", $year+1900, $mon+1, $mday, $hour, $min, $sec;
+my $merged_geo_skus_dir = "temp/skus_" . Izel->date_to_name();
 
 print "Content-type: application/json\r\n\r\n";
 $|++;
