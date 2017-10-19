@@ -97,13 +97,9 @@ sub update {
 	$self->get_dbh;
 
 	my $fh_index = -1;
-	my @csv_paths;
+	my @paths;
 	my @table_ids,
 	my $initials_count = {};
-
-	my $res = {
-		skus2tableIndex => {},
-	};
 
 	$self->load_geo_sku_from_csv(
 		path				=> $args->{county_distributions_path},
@@ -118,15 +114,18 @@ sub update {
 
 	my $tables = $self->compute_fusion_tables;
 
-	my $i = 0;
+	my @res;
 	foreach my $table (@$tables) {
-		$table->create($i++);
-		$table->populate;
+		push @res, $table->create(
+			cb_get_geoid2s_for_sku => $self->get_geoid2s_for_sku
+		);
 	}
 
 	INFO "Create $self->{output_dir}/index.js";
 	open my $FH, ">:encoding(utf8)", "$self->{output_dir}/index.js" or die "$! - $self->{output_dir}/index.js";
-	my $jsonRes = $self->{jsoner}->encode( $res );
+	my $jsonRes = $self->{jsoner}->encode( {
+		res => \@res
+	});
 	print $FH $jsonRes;
 	close $FH;
 
@@ -199,7 +198,7 @@ sub load_geo_sku_from_csv {
 	while (my $row = $csv_input->getline($IN)) {
 		my $sku  = uc $row->[0];
 		my $fips = $row->[1];
-		die 'FIPS should be numeric' if not $fips =~ /^\d+$/;
+		LOGDIE 'FIPS should be numeric, got a row [', join(', ', @$row), ']' if not $fips =~ /^\d+$/;
 		my $geo_id2 = $fips + 0;
 		if (not($args->{include_only_skus}) or exists $args->{include_only_skus}->{$sku}){
 			$self->insert_geosku( $geo_id2, $sku );
@@ -355,19 +354,21 @@ sub add {
 sub create {
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
-	$self->{index_number} = $args->{index_number};
+	$self->{index_number} = $args->{index_number} if defined $args->{index_number};
 	$self->{name} = 'Table #' . $self->{index_number};
 
-	my $path = $self->_create_file;
+	my $path = $self->_create_file(
+		$args->{cb_get_geoid2s_for_sku}
+	);
 
 	my $create_res = $self->_publish_table_to_google(
-		csv_path => $path,
+		path => $path,
 	);
 }
 
 sub _create_file {
 	TRACE 'Enter _create_file with ' ,join' ', @_;
-	my ($self, $obj_w_dbh, $get_geoid2s_for_sku) = @_;
+	my ($self, $cb_get_geoid2s_for_sku) = @_;
 
 	$self->require_defined_fields('output_dir', 'index_number');
 
@@ -378,7 +379,7 @@ sub _create_file {
 
 	foreach my $sku (@{ $self->{skus} }) {
 		TRACE 'Do SKU ', $sku;
-		foreach my $geo_id2 ($obj_w_dbh->$get_geoid2s_for_sku($sku)) {
+		foreach my $geo_id2 ($cb_get_geoid2s_for_sku->($sku)) {
 			$FH->print( "$sku,$geo_id2\n" );
 		}
 	}
@@ -422,7 +423,7 @@ sub _publish_table_to_google {
 	my $table_id = $res->{content}->{tableId};
 
 	$res = add_rows_to_google(
-		csv_path => $args->{csv_path},
+		path => $args->{path},
 		table_id => $table_id,
 	);
 
@@ -464,8 +465,8 @@ sub add_rows_to_google {
 		. '/' . $args->{table_id} . '/import'
 		. '?' . $self->{auth_string};
 
-	INFO "Posting $args->{csv_path} to $url";
-	return $self->_post_blob( $url, $args->{csv_path} );
+	INFO "Posting $args->{path} to $url";
+	return $self->_post_blob( $url, $args->{path} );
 }
 
 
@@ -500,7 +501,7 @@ sub add_rows_to_google {
 	# foreach my $table ( @{$res->{response}} ) {
 	# 	$self->add_rows_to_google(
 	# 		table_id => $table->{tableId}, 
-	# 		csv_path => shift @csv_paths,
+	# 		path => shift @paths,
 	# 	);
 	# }
 

@@ -39,18 +39,21 @@ subtest 'get_dir_from_path' => sub {
     is $izel->get_dir_from_path('/foo/bar/baz'), '/foo/bar/baz', 'with path';
 };
 
-sub test_dirs {
-    foreach (@_) {
-        ok exists $_->{output_dir}, 'output_dir field created';
-        ok -d $_->{output_dir}, 'output_dir exists';
-        delete $_->{output_dir};
+sub test_table_obj {
+    foreach my $field (@_) {
+        ok exists $field->{output_dir}, 'output_dir field created';
+        ok -d $field->{output_dir}, 'output_dir exists';
+        for (qw( output_dir auth_string jsoner ua)) {
+            ok exists $field->{$_}, "$_ field";
+            delete $field->{$_};
+        }
     }
     return @_;
 }
 
 subtest 'compute_fusion_tables' => sub {
     @_ = @{ $izel->compute_fusion_tables };
-    @_ = test_dirs(@_);
+    @_ = test_table_obj(@_);
 
     is_deeply \@_, [
         bless( {
@@ -62,7 +65,7 @@ subtest 'compute_fusion_tables' => sub {
     ], 'massive limit, tiny data: one table';
 
     @_ = @{ $izel->compute_fusion_tables(14) };
-    @_ = test_dirs(@_);
+    @_ = test_table_obj(@_);
     is_deeply \@_, [
         bless( {
             'count' => 14,
@@ -82,7 +85,6 @@ subtest 'compute_fusion_tables' => sub {
 };
 
 subtest 'get_geoid2s_for_sku' => sub {
-    dies_ok { $izel->get_geoid2s_for_sku }, 'Requires SKU';
     @_ = $izel->get_geoid2s_for_sku('ARTHR'), 
     is $#_, 14-1, 'Gets ARTHR';
     
@@ -91,7 +93,7 @@ subtest 'get_geoid2s_for_sku' => sub {
 subtest 'create_fusion_tables' => sub {
     my $tables = $izel->compute_fusion_tables;
     my $path = $tables->[0]->_create_file(
-        $izel, $izel->can('get_geoid2s_for_sku')
+        cb_get_geoid2s_for_sku => $izel->get_geoid2s_for_sku
     );
     ok -e $path, 'Created CSV';
 
