@@ -320,10 +320,18 @@ sub get_dbh {
 
 sub get_geoid2s_for_sku {
 	my ($self, $sku) = @_;
+	TRACE 'Enter for SKU ', $sku;
+	LOGCONFESS 'No SKU' if not $sku;
 	$self->{sth}->{get_geoid2s_for_sku} ||= $self->{dbh}->prepare_cached(
 		"SELECT GEO_ID2 FROM $CONFIG->{geosku_table_name} WHERE sku = ?"
 	);
-	return grep {$_->[0]} $self->{sth}->{get_geoid2s_for_sku}->fetchall_array( $sku );
+	return map {$_->[0]} @{
+		$self->{dbh}->selectall_arrayref( 
+			$self->{sth}->{get_geoid2s_for_sku},
+			{}, 
+			$sku 
+		)
+	};
 }
 
 sub insert_geosku {
@@ -382,6 +390,7 @@ package Table;
 use base 'IzelBase';
 use Log::Log4perl ':easy';
 use File::Temp ();
+use Text::CSV_XS;
 
 my $TABLES_CREATED = -1;
 
@@ -427,27 +436,24 @@ sub create {
 }
 
 sub _create_file {
-	TRACE 'Enter';
-	my $self = shift;
-	my $get_geoid2s_for_sku = shift;
+	TRACE 'Enter _create_file with ' ,join' ', @_;
+	my ($self, $obj_w_dbh, $get_geoid2s_for_sku) = @_;
+
 	$self->require_defined_fields('dir', 'index_number');
 
 	my $path = $self->{dir} .'/'. $self->{index_number} . '.csv';
 	open my $FH, ">:encoding(utf8)", $path or die "$! - $path";
 
-	my $csv_out = Text::CSV_XS->new ({ 
-		binary => 1, 
-		auto_diag => 1,
-		column_names => ['GEOID2', 'SKU']
-	});
-    $csv_out->eol("\n");
+	$FH->print("GEO_ID2,SKU,\n");
 
 	foreach my $sku (@{ $self->{skus} }) {
-		$self->{csv_out}->print( $FH, [
-			$sku, 
-			$get_geoid2s_for_sku->($sku)
-		]);
+		TRACE 'Do SKU ', $sku;
+		foreach my $geo_id2 ($obj_w_dbh->$get_geoid2s_for_sku($sku)) {
+			$FH->print( "$sku,$geo_id2\n" );
+		}
 	}
+
+	TRACE 'Wrote ', $path;
 
 	return $path;
 }

@@ -81,10 +81,17 @@ subtest 'compute_fusion_tables' => sub {
     ], 'force two tables';
 };
 
+subtest 'get_geoid2s_for_sku' => sub {
+    dies_ok { $izel->get_geoid2s_for_sku }, 'Requires SKU';
+    @_ = $izel->get_geoid2s_for_sku('ARTHR'), 
+    is $#_, 14-1, 'Gets ARTHR';
+    
+};
+
 subtest 'create_fusion_tables' => sub {
     my $tables = $izel->compute_fusion_tables;
     $tables->[0]->_create_file(
-        $izel->can('get_geoid2s_for_sku')
+        $izel, $izel->can('get_geoid2s_for_sku')
     );
 };
 
