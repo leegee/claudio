@@ -1,8 +1,21 @@
 use strict;
 use warnings;
 
-package Izel;
+package IzelBase;
+use Data::Dumper;
+use Log::Log4perl ':easy';
 
+sub require_defined_fields {
+	my ($self, @fields) = @_;
+	my @missing = grep {
+		not (exists $self->{$_} || defined $self->{$_}) 
+	} @fields;
+	LOGCONFESS 'Missing fields: ' . join(', ', @missing) . "\nin " . Dumper($self) if @missing;
+}
+
+package Izel;
+use base 'IzelBase';
+use File::Temp ();
 use Data::Dumper;
 use LWP::UserAgent();
 use Encode;
@@ -18,6 +31,11 @@ our $CONFIG = {
 	geosku_table_name => 'geosku',
 	db_path => 'sqlite.db',
 };
+
+sub date_to_name {
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
+	return sprintf "%d%02d%02d-%02d%02d%02d/", $year+1900, $mon+1, $mday, $hour, $min, $sec;
+}
 
 sub new {
 	my $inv  = shift;
@@ -100,79 +118,24 @@ sub update {
 		include_only_skus	=> $args->{include_only_skus},
 	);
 
-	my $csv_output = Text::CSV_XS->new ({ binary => 1, auto_diag => 1 });
-    $csv_output->eol("\n");
-
-	my @keys = @{ $self->get_initials };
-
-	# Distribute volumes of SKUs across multiple files.
-	# Order output by volume.
-	# Write alternatly to one of several outupt files
-	my $dir = $self->get_dir_from_path( $args->{output_path} );
-	if (!-d $dir) {
-		mkdir $dir or die "$! - $dir";
-	}
-	
-	my (@OUT, $fh);
-
-	for my $i (0 .. $args->{number_of_output_files} -1){
-		my $name = 'skus_table_' . $i;
-
-		my $create_res = $self->publish_table_to_google({
-			table_name => $name,
-			table_number => $i,
-		});
-
-		push @{$res->{response}}, $create_res;
-
-		my $pathCsv = $dir .'/'. $i . '.csv';
-		open $fh, ">:encoding(utf8)", $pathCsv or die "$! - $pathCsv";
-		print $fh "GEO_ID2,SKU\n";
-		push @OUT, $fh;
-		push @csv_paths, $pathCsv;
-		push @table_ids, $create_res->{table_id} if $create_res->{table_id};
+	$self->{output_dir} = $self->get_dir_from_path( $args->{output_path} );
+	if (!-d $self->{output_dir}) {
+		mkdir $self->{output_dir} or die "$! - $self->{output_dir}";
 	}
 
-	my $az;
+	my $tables = $self->compute_fusion_tables;
 
-	while (@keys){
-		$fh_index ++;
-		$fh_index = 0 if $fh_index >= $args->{number_of_output_files};
-		my $initial = shift @keys;
-
-		INFO sprintf "SKUs initial %s with %s into %s",
-			$initial, scalar( keys %{ $az->{$initial} }), $fh_index;
-
-		foreach my $sku (sort keys %{ $az->{$initial} }){
-			$res->{skus2tableIndex}->{$sku} = $fh_index;
-
-			foreach my $geo_id2 (@{
-				$az->{$initial}->{$sku}
-			} ){
-				$csv_output->print( $OUT[$fh_index], [
-					$geo_id2, $sku
-				]);
-			}
-		}
-
-		# Terminate JSON
-		print $fh "]\n";
+	my $i = 0;
+	foreach my $table (@$tables) {
+		$table->create($i++);
+		$table->populate;
 	}
 
-	close $_ foreach @OUT;
-
-	foreach my $table ( @{$res->{response}} ) {
-		$self->add_rows_to_google(
-			table_id => $table->{tableId}, 
-			csv_path => shift @csv_paths,
-		);
-	}
-
-	INFO "Create $dir/index.js";
-	open $fh, ">:encoding(utf8)", "$dir/index.js" or die "$! - $dir/index.js";
+	INFO "Create $self->{output_dir}/index.js";
+	open my $FH, ">:encoding(utf8)", "$self->{output_dir}/index.js" or die "$! - $self->{output_dir}/index.js";
 	my $jsonRes = $self->{jsoner}->encode( $res );
-	print $fh $jsonRes;
-	close $fh;
+	print $FH $jsonRes;
+	close $FH;
 
 	return $jsonRes;
 }
@@ -250,13 +213,13 @@ sub _post_blob {
 sub load_sku2latin_from_csv {
     my $args = shift;
     my $skus = {};
-    my $csv_output = Text::CSV_XS->new ({ binary => 1, auto_diag => 1 });
+    my $csv_out = Text::CSV_XS->new ({ binary => 1, auto_diag => 1 });
     INFO "Reading ",$args->{sku2latin_path};
     
 	open my $IN, "<:encoding(utf8)", $args->{sku2latin_path}
         or LOGDIE "$! - $args->{sku2latin_path}";
     
-	while (my $row = $csv_output->getline($IN)) {
+	while (my $row = $csv_out->getline($IN)) {
         my $sku = uc $row->[0];
         $sku =~ s/^\s+//;
         $sku =~ s/\s+$//;
@@ -342,8 +305,8 @@ sub get_dbh {
 	# If the scheme does not exist, create it:
 	if (not grep { $_->[2] eq $CONFIG->{geosku_table_name}  } @tables ) {
 		$sth = $self->{dbh}->prepare("CREATE TABLE $CONFIG->{geosku_table_name} (
-			GEO_ID2	BLOB,
-			SKU		VARCHAR(10)
+			geo_id2	BLOB,
+			sku		VARCHAR(10)
 		)");
 		$sth->execute or die;
 		$self->{created_db} = 1;
@@ -355,11 +318,19 @@ sub get_dbh {
 
 }
 
+sub get_geoid2s_for_sku {
+	my ($self, $sku) = @_;
+	$self->{sth}->{get_geoid2s_for_sku} ||= $self->{dbh}->prepare_cached(
+		"SELECT GEO_ID2 FROM $CONFIG->{geosku_table_name} WHERE sku = ?"
+	);
+	return grep {$_->[0]} $self->{sth}->{get_geoid2s_for_sku}->fetchall_array( $sku );
+}
+
 sub insert_geosku {
 	my ($self, $geo_id2, $sku) = @_;
 
-	$self->{sth}->{insert_geosku} ||= $self->{dbh}->prepare(
-		"INSERT INTO $CONFIG->{geosku_table_name} (GEO_ID2, SKU) VALUES (?, ?)"
+	$self->{sth}->{insert_geosku} ||= $self->{dbh}->prepare_cached(
+		"INSERT INTO $CONFIG->{geosku_table_name} (geo_id2, sku) VALUES (?, ?)"
 	);
 
 	return $self->{sth}->{insert_geosku}->execute( $geo_id2, $sku );
@@ -371,47 +342,68 @@ sub get_initials {
 	];
 }
 
-sub distribute_for_fusion_tables {
+sub compute_fusion_tables {
 	my $self = shift;
+	Table->RESET;
 	my $fusion_table_limit = shift || $FUSION_TABLE_LIMIT;
 	my $counts = $self->{dbh}->selectall_arrayref(
-		"SELECT COUNT(geo_id2) AS c, SKU FROM $CONFIG->{geosku_table_name} GROUP BY SKU ORDER BY c DESC"
+		"SELECT COUNT(geo_id2) AS c, sku FROM $CONFIG->{geosku_table_name} GROUP BY sku ORDER BY c DESC"
 	);
 
-	my $total = 0;
-	map { $total += $_->[0] } @$counts;
+	# my $total = 0;
+	# map { $total += $_->[0] } @$counts;
 
 	my $tables = [
-		Table->new()
+		Table->new( 
+			dir => $self->{output_dir}
+		)
 	];
 	my $table_index = 0;
 
 	foreach my $record (@$counts) {
 		if ($tables->[$table_index]->{count} + $record->[0] > $fusion_table_limit) {
 			$table_index ++;
-			$tables->[$table_index] = Table->new();
+			$tables->[$table_index] = Table->new( 
+				dir => $self->{output_dir}
+			);
 		}
 		$tables->[$table_index]->add( 
 			count => $record->[0],
 			sku => $record->[1],
 		);
 	}
-	
-	return {
-		tables => $tables,
-		total => $total,
-	};
+
+	return $tables;
 }
 
 1;
 
 package Table;
+use base 'IzelBase';
+use Log::Log4perl ':easy';
+use File::Temp ();
+
+my $TABLES_CREATED = -1;
+
+sub RESET  {
+	my $inv = shift;
+	$TABLES_CREATED = -1;
+}
 
 sub new {
-	return bless { 
+	my $inv  = shift;
+	my $args = ref($_[0])? shift : {@_};
+	$TABLES_CREATED ++;
+	my $self = {
+		%$args,
 		count => 0, 
-		skus => []
+		skus => [],
+		index_number => exists($args->{index_number}) ? $args->{index_number} : ($TABLES_CREATED),
+		dir => $args->{dir} || File::Temp::tempdir( CLEANUP => 0 ),
 	};
+	$self->{name} = $args->{name} || 'Table #' . $self->{index_number};
+	$self = bless $self, ref($inv) ? ref($inv) : $inv;
+	return $self;
 }
 
 sub add {
@@ -419,5 +411,81 @@ sub add {
 	$self->{count} += $args->{count};
 	push @{ $self->{skus} }, $args->{sku};
 }
+
+sub create {
+	my $self = shift;
+	my $args = ref($_[0])? shift : {@_};
+	$self->{index_number} = $args->{index_number};
+	$self->{name} = 'Table #' . $self->{index_number};
+
+	my $create_res = $self->publish_table_to_google({
+		table_name => $self->{name},
+		table_number => $self->{index_number},
+	});
+
+	$self->_create_file;
+}
+
+sub _create_file {
+	TRACE 'Enter';
+	my $self = shift;
+	my $get_geoid2s_for_sku = shift;
+	$self->require_defined_fields('dir', 'index_number');
+
+	my $path = $self->{dir} .'/'. $self->{index_number} . '.csv';
+	open my $FH, ">:encoding(utf8)", $path or die "$! - $path";
+
+	my $csv_out = Text::CSV_XS->new ({ 
+		binary => 1, 
+		auto_diag => 1,
+		column_names => ['GEOID2', 'SKU']
+	});
+    $csv_out->eol("\n");
+
+	foreach my $sku (@{ $self->{skus} }) {
+		$self->{csv_out}->print( $FH, [
+			$sku, 
+			$get_geoid2s_for_sku->($sku)
+		]);
+	}
+
+	return $path;
+}
+
+
+	# my $az;
+
+	# while (@keys){
+	# 	$fh_index ++;
+	# 	$fh_index = 0 if $fh_index >= $args->{number_of_output_files};
+	# 	my $initial = shift @keys;
+
+	# 	INFO sprintf "SKUs initial %s with %s into %s",
+	# 		$initial, scalar( keys %{ $az->{$initial} }), $fh_index;
+
+	# 	foreach my $sku (sort keys %{ $az->{$initial} }){
+	# 		$res->{skus2tableIndex}->{$sku} = $fh_index;
+
+	# 		foreach my $geo_id2 (@{
+	# 			$az->{$initial}->{$sku}
+	# 		} ){
+	# 			$self->{csv_out}->print( $OUT[$fh_index], [
+	# 				$geo_id2, $sku
+	# 			]);
+	# 		}
+	# 	}
+
+	# 	# Terminate JSON
+	# 	print $fh "]\n";
+	# }
+
+	# close $_ foreach @OUT;
+
+	# foreach my $table ( @{$res->{response}} ) {
+	# 	$self->add_rows_to_google(
+	# 		table_id => $table->{tableId}, 
+	# 		csv_path => shift @csv_paths,
+	# 	);
+	# }
 
 1;
