@@ -117,7 +117,7 @@ sub update {
 	my @res;
 	foreach my $table (@$tables) {
 		push @res, $table->create(
-			cb_get_geoid2s_for_sku => $self->get_geoid2s_for_sku
+			sub { $self->get_geoid2s_for_sku(@_) }
 		);
 	}
 
@@ -352,14 +352,9 @@ sub add {
 }
 
 sub create {
-	my $self = shift;
-	my $args = ref($_[0])? shift : {@_};
-	$self->{index_number} = $args->{index_number} if defined $args->{index_number};
-	$self->{name} = 'Table #' . $self->{index_number};
+	my ($self, $cb_get_geoid2s_for_sku) = @_;
 
-	my $path = $self->_create_file(
-		$args->{cb_get_geoid2s_for_sku}
-	);
+	my $path = $self->_create_file( $cb_get_geoid2s_for_sku );
 
 	my $create_res = $self->_publish_table_to_google(
 		path => $path,
@@ -378,7 +373,7 @@ sub _create_file {
 	$FH->print("GEO_ID2,SKU,\n");
 
 	foreach my $sku (@{ $self->{skus} }) {
-		TRACE 'Do SKU ', $sku;
+		TRACE 'Process SKU ', $sku;
 		foreach my $geo_id2 ($cb_get_geoid2s_for_sku->($sku)) {
 			$FH->print( "$sku,$geo_id2\n" );
 		}

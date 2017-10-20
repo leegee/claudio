@@ -90,11 +90,14 @@ subtest 'get_geoid2s_for_sku' => sub {
     
 };
 
+subtest 'foo' => sub {
+    my $cb = sub { $izel->get_geoid2s_for_sku(@_) };
+    lives_ok { $cb->('ARTHR') } 'get_geoid2s_for_sku curried callback';
+};
+
 subtest 'create_fusion_tables' => sub {
     my $tables = $izel->compute_fusion_tables;
-    my $path = $tables->[0]->_create_file(
-        cb_get_geoid2s_for_sku => $izel->get_geoid2s_for_sku
-    );
+    my $path = $tables->[0]->_create_file( sub { $izel->get_geoid2s_for_sku(@_) } );
     ok -e $path, 'Created CSV';
 
     $tables->[0]->_publish_table_to_google( path => $path );
