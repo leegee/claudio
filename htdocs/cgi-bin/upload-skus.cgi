@@ -12,8 +12,9 @@ use lib 'lib';
 use Izel;
 
 Log::Log4perl->easy_init({
-    file => 'C:/Users/User/src/izel/htdocs/cgi.log',
-    level => $TRACE
+    file => 'cgi.log',
+    level => $TRACE,
+    layout => '%m %l\n'
 });
 
 TRACE 'Init';
@@ -76,6 +77,8 @@ sub main {
         output_path	    	        => $merged_geo_skus_dir,
         include_only_skus           => $skus
     );
+
+    return $jsonRes;
 
     TRACE 'Done  create_fusion_csv_multiple';
 }
