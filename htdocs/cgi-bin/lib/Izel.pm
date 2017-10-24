@@ -1,6 +1,8 @@
 use strict;
 use warnings;
 
+# See https://developers.google.com/fusiontables/docs/v2/using#ImportingRowsIntoTables
+
 package IzelBase;
 use Data::Dumper;
 use Log::Log4perl ':easy';
@@ -21,6 +23,7 @@ use Data::Dumper;
 use Encode;
 use Log::Log4perl ':easy';
 use DBI;
+use JSON::Any;
 
 my $TOTAL_COUNTIES_IN_USA = 3_007;
 my $FUSION_TABLE_LIMIT = 100_000;
@@ -40,6 +43,7 @@ sub new {
 	my $args = ref($_[0])? shift : {@_};
 	my $self = {
 		%$args,
+		jsoner	=> JSON::Any->new,
 		sth		=> {},
 	};
 
@@ -121,64 +125,19 @@ sub update {
 		);
 	}
 
-	INFO "Create $self->{output_dir}/index.js";
-	open my $FH, ">:encoding(utf8)", "$self->{output_dir}/index.js" or die "$! - $self->{output_dir}/index.js";
+	TRACE 'Responses: ', Dumper(\@res);
+
 	my $jsonRes = $self->{jsoner}->encode( {
 		res => \@res
 	});
+
+	INFO "Create $self->{output_dir}/index.js";
+	open my $FH, ">:encoding(utf8)", "$self->{output_dir}/index.js" or die "$! - $self->{output_dir}/index.js";
 	print $FH $jsonRes;
 	close $FH;
 
 	return $jsonRes;
 }
-
-sub load_sku2latin_from_csv {
-    my $args = shift;
-    my $skus = {};
-    my $csv_out = Text::CSV_XS->new ({ binary => 1, auto_diag => 1 });
-    INFO "Reading ",$args->{sku2latin_path};
-    
-	open my $IN, "<:encoding(utf8)", $args->{sku2latin_path}
-        or LOGDIE "$! - $args->{sku2latin_path}";
-    
-	while (my $row = $csv_out->getline($IN)) {
-        my $sku = uc $row->[0];
-        $sku =~ s/^\s+//;
-        $sku =~ s/\s+$//;
-        $skus->{$sku} = $row->[1] || 1;
-        DEBUG "$sku = $skus->{$sku}";
-    }
-    close $IN;
-    TRACE "Read ", scalar keys(%$skus), " skus";
-    return $skus;
-}
-
-# The CSV is the list of SKUs that are in stock
-sub skus_from_csv {
-	TRACE "Enter";
-	my $no_paths = shift || 0;
-	my $path = shift;
-	die 'No path?' if not $path;
-
-	require Text::CSV_XS;
-	my @skus;
-	my $csv = Text::CSV_XS->new ({ binary => 1, auto_diag => 1 });
-	open my $fh, "<:encoding(utf8)", $path
-		or LOGDIE "$path - $!";
-	while (my $row = $csv->getline ($fh)) {
-		my $sku = $row->[0];
-		$sku =~ s/^\s+//;
-		$sku =~ s/\s+$//;
-		push @skus, $no_paths?
-			$sku : join'/',Izel->_path_bits( $sku );
-	}
-	close $fh;
-
-	TRACE "Read ", scalar(@skus), " skus";
-
-	return @skus;
-}
-
 
 sub load_geo_sku_from_csv {
 	my $self = shift;
@@ -284,7 +243,7 @@ sub compute_fusion_tables {
 	# map { $total += $_->[0] } @$counts;
 
 	my $table_args = {
-		map { $_ => $self->{$_} } qw/ auth_string output_dir /
+		map { $_ => $self->{$_} } qw/ auth_string output_dir jsoner /
 	};
 
 	my $tables = [
@@ -315,6 +274,7 @@ use JSON::Any;
 use Log::Log4perl ':easy';
 use File::Temp ();
 use Text::CSV_XS;
+use Data::Dumper;
 
 my $TABLES_CREATED = -1;
 
@@ -353,11 +313,8 @@ sub add {
 
 sub create {
 	my ($self, $cb_get_geoid2s_for_sku) = @_;
-
-	my $path = $self->_create_file( $cb_get_geoid2s_for_sku );
-
-	my $create_res = $self->_publish_table_to_google(
-		path => $path,
+	return $self->_publish_table_to_google(
+		$self->_create_file( $cb_get_geoid2s_for_sku )
 	);
 }
 
@@ -370,12 +327,12 @@ sub _create_file {
 	my $path = $self->{output_dir} .'/'. $self->{index_number} . '.csv';
 	open my $FH, ">:encoding(utf8)", $path or die "$! - $path";
 
-	$FH->print("GEO_ID2,SKU,\n");
+	$FH->print("GEO_ID2,SKU\n");
 
 	foreach my $sku (@{ $self->{skus} }) {
 		TRACE 'Process SKU ', $sku;
 		foreach my $geo_id2 ($cb_get_geoid2s_for_sku->($sku)) {
-			$FH->print( "$sku,$geo_id2\n" );
+			$FH->print( "$geo_id2,$sku\n" );
 		}
 	}
 
@@ -385,9 +342,8 @@ sub _create_file {
 
 sub _publish_table_to_google {
     TRACE "Enter";
-	my $self = shift;
-    my $args = ref($_[0])? shift : {@_};
-	LOGDIE 'No path arg' if not $args->{path};
+	my ($self, $path) = @_;
+	LOGDIE 'No path arg' if not $path;
 	$self->require_defined_fields(qw/ auth_string index_number name /);
 
 	my $table = {
@@ -399,105 +355,83 @@ sub _publish_table_to_google {
 				name => "GEO_ID2",
 				type => "STRING",
 				kind => "fusiontables#column",
-				columnId => 1
+				columnId => 1,
 			},
 			{
 				name => "SKU",
 				type => "STRING",
 				kind => "fusiontables#column",
-				columnId => 2
+				columnId => 2,
 			},
 		]
 	};
 
-    my $url = 'https://www.googleapis.com/fusiontables/v2/tables'
-		. '?' . $self->{auth_string};
+    my $url = 'https://www.googleapis.com/fusiontables/v2/tables';
 
 	INFO "Posting '$self->{name}' to $url";
-	my $res = $self->_post_blob( $url, $table );
-	my $table_id = $res->{content}->{tableId};
+	my $res = {
+		create => $self->_post_blob( $url, $table )
+	};
+	$self->{table_id} = $res->{tableId} = $res->{create}->{content}->{tableId} || LOGDIE "No table ID?\n\n".Dumper($res);
+	INFO "Created table ID ", $self->{table_id};
 
-	$res = add_rows_to_google(
-		path => $args->{path},
-		table_id => $table_id,
-	);
-
-	$res->{tableId} = $table_id;
+	$res->{add_rows} = $self->add_rows_to_google($path);
 
 	INFO Dumper $res;
-
 	return $res;
 }
 
 sub _post_blob {
 	my ($self, $url, $blob) = @_;
+	TRACE 'Enter for ', $url;
+
+	if (ref $blob) {
+		$blob = $self->{jsoner}->encode($blob);
+		$self->{ua}->default_header( 'content-type' => 'application/json' );
+	} else {
+		$self->{ua}->default_header( 'content-type' => 'application/octet-stream' );
+	}
 
 	$self->{ua}->default_header( authorization => $self->{auth_token} ) if $self->{auth_token};
-	$self->{ua}->default_header( 'content-type' => 'application/json' );
+
+	$url .= '?' . $self->{auth_string};
 
 	my $response = $self->{ua}->post(
 		$url, 
-		Content => $blob =~ /\n/ ? $self->{jsoner}->encode($blob) : $blob
+		Content => $blob,
 	);
 
-	my $res = {};
+	INFO Dumper($response);
+
+	my $res = {
+		url => $url,
+		content => $response->header('content-type') =~ /json/ 
+			? $self->{jsoner}->decode( $response->decoded_content ) 
+			: $response->decoded_content
+	};
 
 	if ($response->is_success) {
-		$res->{content} = $self->{jsoner}->decode( $response->decoded_content );
+		INFO 'OK';
+		$res->{content} = $self->{jsoner}->decode( $response->decoded_content ),
 	} else {
+		INFO 'Response: ', $response->status_line;
 		$res->{error} = $response->status_line;
 	}
 
+	# TRACE '_post_blob return: ', $res;
 	return $res;
 }
 
 sub add_rows_to_google {
-	TRACE "Enter";
-	my $self = shift;
-	my $args = ref($_[0])? shift : {@_};
+	my ($self, $path) = @_;
+	TRACE "Enter add_rows_to_google with ", $path;
+	$self->require_defined_fields('table_id');
+			   
+    my $url = 'https://www.googleapis.com/upload/fusiontables/v2/tables/'
+		. $self->{table_id} . '/import';
 
-    my $url = 'https://www.googleapis.com/fusiontables/v2/tables'
-		. '/' . $args->{table_id} . '/import'
-		. '?' . $self->{auth_string};
-
-	INFO "Posting $args->{path} to $url";
-	return $self->_post_blob( $url, $args->{path} );
+	INFO "Posting $path to $url";
+	return $self->_post_blob( $url, $path );
 }
-
-
-	# my $az;
-
-	# while (@keys){
-	# 	$fh_index ++;
-	# 	$fh_index = 0 if $fh_index >= $args->{number_of_output_files};
-	# 	my $initial = shift @keys;
-
-	# 	INFO sprintf "SKUs initial %s with %s into %s",
-	# 		$initial, scalar( keys %{ $az->{$initial} }), $fh_index;
-
-	# 	foreach my $sku (sort keys %{ $az->{$initial} }){
-	# 		$res->{skus2tableIndex}->{$sku} = $fh_index;
-
-	# 		foreach my $geo_id2 (@{
-	# 			$az->{$initial}->{$sku}
-	# 		} ){
-	# 			$self->{csv_out}->print( $OUT[$fh_index], [
-	# 				$geo_id2, $sku
-	# 			]);
-	# 		}
-	# 	}
-
-	# 	# Terminate JSON
-	# 	print $fh "]\n";
-	# }
-
-	# close $_ foreach @OUT;
-
-	# foreach my $table ( @{$res->{response}} ) {
-	# 	$self->add_rows_to_google(
-	# 		table_id => $table->{tableId}, 
-	# 		path => shift @paths,
-	# 	);
-	# }
 
 1;
