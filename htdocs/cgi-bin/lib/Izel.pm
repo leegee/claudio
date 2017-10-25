@@ -2,6 +2,7 @@ use strict;
 use warnings;
 
 # See https://developers.google.com/fusiontables/docs/v2/using#ImportingRowsIntoTables
+# Imports: https://support.google.com/fusiontables/answer/171181?hl=en
 
 package IzelBase;
 use Data::Dumper;
@@ -48,7 +49,8 @@ sub new {
 	};
 
 	if ($self->{auth_string} and not $self->{auth_token}) {
-		($self->{auth_token}) = $self->{auth_string} =~ /access_token=([^&;]+)/;
+		($self->{auth_token}) = $self->{auth_string} =~ /access_token=(.+)$/;
+		INFO 'SET AUTH TOKEN TO ', $self->{auth_token};
 	}
 
 	return bless $self, ref($inv) ? ref($inv) : $inv;
@@ -120,23 +122,21 @@ sub update {
 
 	my @res;
 	foreach my $table (@$tables) {
-		push @res, $table->create(
-			sub { $self->get_geoid2s_for_sku(@_) }
-		);
+		push @res, $table->create();
 	}
 
-	TRACE 'Responses: ', Dumper(\@res);
+	# TRACE 'Responses: ', Dumper(\@res);
 
-	my $jsonRes = $self->{jsoner}->encode( {
-		res => \@res
-	});
+	# my $jsonRes = $self->{jsoner}->encode( {
+	# 	res => \@res
+	# });
 
-	INFO "Create $self->{output_dir}/index.js";
-	open my $FH, ">:encoding(utf8)", "$self->{output_dir}/index.js" or die "$! - $self->{output_dir}/index.js";
-	print $FH $jsonRes;
-	close $FH;
+	# INFO "Create $self->{output_dir}/index.js";
+	# open my $FH, ">:encoding(utf8)", "$self->{output_dir}/index.js" or die "$! - $self->{output_dir}/index.js";
+	# print $FH $jsonRes;
+	# close $FH;
 
-	return $jsonRes;
+	# return $jsonRes;
 }
 
 sub load_geo_sku_from_csv {
@@ -196,23 +196,6 @@ sub get_dbh {
 	else {
 		$self->{created_db} = 0;
 	}
-
-}
-
-sub get_geoid2s_for_sku {
-	my ($self, $sku) = @_;
-	TRACE 'Enter for SKU ', $sku;
-	LOGCONFESS 'No SKU' if not $sku;
-	$self->{sth}->{get_geoid2s_for_sku} ||= $self->{dbh}->prepare_cached(
-		"SELECT GEO_ID2 FROM $CONFIG->{geosku_table_name} WHERE sku = ?"
-	);
-	return map {$_->[0]} @{
-		$self->{dbh}->selectall_arrayref( 
-			$self->{sth}->{get_geoid2s_for_sku},
-			{}, 
-			$sku 
-		)
-	};
 }
 
 sub insert_geosku {
@@ -239,11 +222,8 @@ sub compute_fusion_tables {
 		"SELECT COUNT(geo_id2) AS c, sku FROM $CONFIG->{geosku_table_name} GROUP BY sku ORDER BY c DESC"
 	);
 
-	# my $total = 0;
-	# map { $total += $_->[0] } @$counts;
-
 	my $table_args = {
-		map { $_ => $self->{$_} } qw/ auth_string output_dir jsoner /
+		map { $_ => $self->{$_} } qw/ auth_token auth_string output_dir jsoner dbh /
 	};
 
 	my $tables = [
@@ -253,10 +233,11 @@ sub compute_fusion_tables {
 
 	foreach my $record (@$counts) {
 		if ($tables->[$table_index]->{count} + $record->[0] > $fusion_table_limit) {
+			$tables->[$table_index]->create();
 			$table_index ++;
 			$tables->[$table_index] = Table->new( $table_args );
 		}
-		$tables->[$table_index]->add( 
+		$tables->[$table_index]->add_count( 
 			count => $record->[0],
 			sku => $record->[1],
 		);
@@ -276,6 +257,7 @@ use File::Temp ();
 use Text::CSV_XS;
 use Data::Dumper;
 
+my $CSV_EOL = "\n";
 my $TABLES_CREATED = -1;
 
 sub RESET  {
@@ -291,6 +273,7 @@ sub new {
 		%$args,
 		jsoner	=> JSON::Any->new,
 		ua		=> LWP::UserAgent->new,
+		sth		=> {},
 		count => 0, 
 		skus => [],
 		index_number => exists($args->{index_number}) ? $args->{index_number} : ($TABLES_CREATED),
@@ -305,46 +288,16 @@ sub new {
 	return $self;
 }
 
-sub add {
+sub add_count {
 	my ($self, $args) = (shift, ref($_[0])? shift : {@_} );
 	$self->{count} += $args->{count};
 	push @{ $self->{skus} }, $args->{sku};
 }
 
-sub create {
-	my ($self, $cb_get_geoid2s_for_sku) = @_;
-	return $self->_publish_table_to_google(
-		$self->_create_file( $cb_get_geoid2s_for_sku )
-	);
-}
-
-sub _create_file {
-	TRACE 'Enter _create_file with ' ,join' ', @_;
-	my ($self, $cb_get_geoid2s_for_sku) = @_;
-
-	$self->require_defined_fields('output_dir', 'index_number');
-
-	my $path = $self->{output_dir} .'/'. $self->{index_number} . '.csv';
-	open my $FH, ">:encoding(utf8)", $path or die "$! - $path";
-
-	$FH->print("GEO_ID2,SKU\n");
-
-	foreach my $sku (@{ $self->{skus} }) {
-		TRACE 'Process SKU ', $sku;
-		foreach my $geo_id2 ($cb_get_geoid2s_for_sku->($sku)) {
-			$FH->print( "$geo_id2,$sku\n" );
-		}
-	}
-
-	TRACE 'Wrote ', $path;
-	return $path;
-}
-
 sub _publish_table_to_google {
     TRACE "Enter";
-	my ($self, $path) = @_;
-	LOGDIE 'No path arg' if not $path;
-	$self->require_defined_fields(qw/ auth_string index_number name /);
+	my $self = shift;
+	$self->require_defined_fields(qw/ index_number name /);
 
 	my $table = {
 		name => $self->{name},
@@ -369,36 +322,42 @@ sub _publish_table_to_google {
     my $url = 'https://www.googleapis.com/fusiontables/v2/tables';
 
 	INFO "Posting '$self->{name}' to $url";
-	my $res = {
-		create => $self->_post_blob( $url, $table )
-	};
-	$self->{table_id} = $res->{tableId} = $res->{create}->{content}->{tableId} || LOGDIE "No table ID?\n\n".Dumper($res);
+	my $res = $self->_post_blob( $url, $table );
+	$self->{table_id} = $res->{tableId} = $res->{content}->{tableId};
 	INFO "Created table ID ", $self->{table_id};
-
-	$res->{add_rows} = $self->add_rows_to_google($path);
-
 	INFO Dumper $res;
 	return $res;
 }
 
 sub _post_blob {
-	my ($self, $url, $blob) = @_;
+	my ($self, $url, $blob_or_path, $isFormData) = @_;
 	TRACE 'Enter for ', $url;
 
-	if (ref $blob) {
-		$blob = $self->{jsoner}->encode($blob);
-		$self->{ua}->default_header( 'content-type' => 'application/json' );
+	if (ref $blob_or_path) {
+		if ($isFormData) {
+			TRACE 'Is form data';
+			# $self->{ua}->default_header( 'content-type' => 'application/json' );
+		} else {
+			TRACE 'Is json data';
+			$blob_or_path = $self->{jsoner}->encode($blob_or_path);
+			$self->{ua}->default_header( 'content-type' => 'application/json' );
+		}
 	} else {
+		TRACE 'File path: ', $blob_or_path;
 		$self->{ua}->default_header( 'content-type' => 'application/octet-stream' );
 	}
 
-	$self->{ua}->default_header( authorization => $self->{auth_token} ) if $self->{auth_token};
+	# $self->{ua}->default_header( Authorization => $self->{auth_token} ) if $self->{auth_token};
 
-	$url .= '?' . $self->{auth_string};
+	$url .= ($url !~ /\?/ ? '?' : '&') . $self->{auth_string};
 
 	my $response = $self->{ua}->post(
 		$url, 
-		Content => $blob,
+		(	$isFormData ? 
+			( $blob_or_path ) 
+		:
+			( Content => $blob_or_path )
+		)
 	);
 
 	INFO Dumper($response);
@@ -422,16 +381,74 @@ sub _post_blob {
 	return $res;
 }
 
-sub add_rows_to_google {
+# https://developers.google.com/fusiontables/docs/v2/reference/table/importRows
+sub upload_csv_rows {
 	my ($self, $path) = @_;
-	TRACE "Enter add_rows_to_google with ", $path;
+	TRACE "Enter upload_csv_rows with ", $path;
 	$self->require_defined_fields('table_id');
 			   
     my $url = 'https://www.googleapis.com/upload/fusiontables/v2/tables/'
-		. $self->{table_id} . '/import';
+		. $self->{table_id} . '/import?uploadType=media';
 
 	INFO "Posting $path to $url";
 	return $self->_post_blob( $url, $path );
+}
+
+sub get_geoid2s_for_sku {
+	my ($self, $sku) = @_;
+	TRACE 'Enter for SKU ', $sku;
+	LOGCONFESS 'No SKU' if not $sku;
+	$self->{sth}->{get_geoid2s_for_sku} ||= $self->{dbh}->prepare_cached(
+		"SELECT GEO_ID2 FROM $CONFIG->{geosku_table_name} WHERE sku = ?"
+	);
+	return map {$_->[0]} @{
+		$self->{dbh}->selectall_arrayref( 
+			$self->{sth}->{get_geoid2s_for_sku},
+			{}, 
+			$sku 
+		)
+	};
+}
+
+sub create {
+	my $self = shift;
+	$self->_publish_table_to_google();
+	$self->_populate_table_on_google();
+}
+
+# https://developers.google.com/fusiontables/docs/v2/sql-reference
+# https://developers.google.com/fusiontables/docs/v2/using#insertRow
+sub _populate_table_on_google {
+	my $self = shift;
+	my $url = 'https://www.googleapis.com/fusiontables/v2/query';
+	$self->require_defined_fields(qw/ table_id count skus /);
+
+	# Up to 500 INSERTs 
+	my $statements = 0;
+	my $sql = '';
+	my @res;
+
+	foreach my $sku (@{ $self->{skus} }) {
+		my @geo_id2s = $self->get_geoid2s_for_sku($sku);
+		foreach my $geo_id2 (@geo_id2s) {
+			if ($statements >= 500 ) {
+				push @res, $self->_execute_gsql($sql);
+				$statements = 0;
+			}
+			$sql .= sprintf "INSERT INTO %s (GEO_ID2, SKU) VALUES ('%s', '%s');\n",
+				$self->{table_id}, $geo_id2, $sku;
+		}
+	}
+	push @res, $self->_execute_gsql($sql);
+	TRACE Dumper \@res;
+	return @res;
+}
+
+sub _execute_gsql {
+	my ($self, $gsql) = @_;
+	my $url = 'https://www.googleapis.com/fusiontables/v2/query';
+	INFO "Posting form gSQL to $url";
+	return $self->_post_blob( $url, { sql => $gsql }, 'isFormData' );
 }
 
 1;
