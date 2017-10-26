@@ -2,6 +2,8 @@
 use strict;
 use warnings;
 
+package main;
+
 use IO::Handle;
 use CGI;
 use CGI::Carp 'fatalsToBrowser';
@@ -11,13 +13,31 @@ use Data::Dumper;
 use lib 'lib';
 use Izel;
 
-Log::Log4perl->easy_init({
-    file => 'cgi.log',
-    level => $TRACE,
-    layout => '%m %l\n'
-});
+print "Content-type: application/json\r\n\r\n";
+$|++;
 
-TRACE 'Init';
+# Log::Log4perl->easy_init({
+#     # file => 'cgi.log',
+#     file => {'STDOUT'},
+#     level => $TRACE,
+#     layout => '%m %l\n'
+# });
+
+Log::Log4perl->init(\'
+    log4perl.logger = TRACE, IzelApp
+    log4perl.appender.IzelApp = HtmlRealTime
+    log4perl.appender.IzelApp.layout = PatternLayout
+    log4perl.appender.IzelApp.layout.ConversionPattern = %d %m %n
+');
+
+DEBUG "Init\n";
+print "Here we go\n";
+sleep(10);
+TRACE 'OK';
+print "Here we go 2\n";
+sleep(10);
+TRACE 'DONE';
+exit;
 
 $CGI::POST_MAX = 1024 * 10000;
 $CGI::DISABLE_UPLOADS = 0; 
@@ -25,9 +45,6 @@ $CGI::DISABLE_UPLOADS = 0;
 my $UPLOADED_SKU_CSV = 'latest_skus.csv';
 
 my $merged_geo_skus_dir = "temp/skus_" . Izel->date_to_name();
-
-print "Content-type: application/json\r\n\r\n";
-$|++;
 
 my $final = main();
 print "$final\n\r\n\r";

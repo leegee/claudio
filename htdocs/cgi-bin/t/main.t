@@ -105,7 +105,7 @@ subtest 'create_fusion_tables' => sub {
     isa_ok $tables, 'ARRAY', 'rv';
     # my $path = $tables->[0]->_create_file( sub { $izel->get_geoid2s_for_sku(@_) } );
     # ok -e $path, 'Created CSV';
-    # throws_ok { $tables->[0]->_publish_table_to_google( path => $path ) } qr/Missing fields: auth_string/;
+    # throws_ok { $tables->[0]->_create_table_on_google( path => $path ) } qr/Missing fields: auth_string/;
 };
 
 done_testing();
