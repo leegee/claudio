@@ -26,6 +26,7 @@ use Log::Log4perl ':easy';
 use DBI;
 use JSON::Any;
 
+my $US_COUNTIES_TABLE_ID = '1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV';
 my $TOTAL_COUNTIES_IN_USA = 3_007;
 my $FUSION_TABLE_LIMIT = 100_000;
 
@@ -44,6 +45,7 @@ sub new {
 	my $args = ref($_[0])? shift : {@_};
 	my $self = {
 		%$args,
+		us_counties_table_id => $US_COUNTIES_TABLE_ID,
 		jsoner	=> JSON::Any->new,
 		sth		=> {},
 	};
@@ -216,18 +218,18 @@ sub get_initials {
 
 sub compute_fusion_tables {
 	my $self = shift;
-	Table->RESET;
+	Izel::Table->RESET;
 	my $fusion_table_limit = shift || $FUSION_TABLE_LIMIT;
 	my $counts = $self->{dbh}->selectall_arrayref(
 		"SELECT COUNT(geo_id2) AS c, sku FROM $CONFIG->{geosku_table_name} GROUP BY sku ORDER BY c DESC"
 	);
 
 	my $table_args = {
-		map { $_ => $self->{$_} } qw/ auth_token auth_string output_dir jsoner dbh /
+		map { $_ => $self->{$_} } qw/ auth_token auth_string output_dir jsoner dbh us_counties_table_id /
 	};
 
 	my $tables = [
-		Table->new( $table_args )
+		Izel::Table->new( $table_args )
 	];
 	my $table_index = 0;
 
@@ -235,7 +237,7 @@ sub compute_fusion_tables {
 		if ($tables->[$table_index]->{count} + $record->[0] > $fusion_table_limit) {
 			$tables->[$table_index]->create();
 			$table_index ++;
-			$tables->[$table_index] = Table->new( $table_args );
+			$tables->[$table_index] = Izel::Table->new( $table_args );
 		}
 		$tables->[$table_index]->add_count( 
 			count => $record->[0],
@@ -248,7 +250,7 @@ sub compute_fusion_tables {
 
 1;
 
-package Table;
+package Izel::Table;
 use base 'IzelBase';
 use LWP::UserAgent();
 use JSON::Any;
@@ -288,13 +290,29 @@ sub new {
 	return $self;
 }
 
+sub create {
+	TRACE 'Enter';
+	my $self = shift;
+	$self->_create_table_on_google();
+	$self->_populate_table_on_google();
+	
+	my $res = $self->_create_merge();
+
+	# if ($res->{mergedtableid}) {
+	# 	my $delete_res = $self->delete();
+	# }
+
+	TRACE 'Leave';
+	return $res;
+}
+
 sub add_count {
 	my ($self, $args) = (shift, ref($_[0])? shift : {@_} );
 	$self->{count} += $args->{count};
 	push @{ $self->{skus} }, $args->{sku};
 }
 
-sub _publish_table_to_google {
+sub _create_table_on_google {
     TRACE "Enter";
 	my $self = shift;
 	$self->require_defined_fields(qw/ index_number name /);
@@ -329,21 +347,29 @@ sub _publish_table_to_google {
 	return $res;
 }
 
+# If $payload is a string, it is assumed to be a path to a file;
+# if it is a reference to a hash, it is assumed to be JSON.
+# if it is a reference to an array, it is assumed to be gSQL.
 sub _post_blob {
-	my ($self, $url, $blob_or_path, $isFormData) = @_;
+	my ($self, $url, $payload) = @_;
 	TRACE 'Enter for ', $url;
+	my $isFormData;
 
-	if (ref $blob_or_path) {
-		if ($isFormData) {
+	if (ref $payload) {
+		if (ref $payload eq 'ARRAY') {
 			TRACE 'Is form data';
+			$payload = { 
+				sql => join " ; ", @$payload
+			};
+			$isFormData = 1;
 			# $self->{ua}->default_header( 'content-type' => 'application/json' );
 		} else {
 			TRACE 'Is json data';
-			$blob_or_path = $self->{jsoner}->encode($blob_or_path);
+			$payload = $self->{jsoner}->encode($payload);
 			$self->{ua}->default_header( 'content-type' => 'application/json' );
 		}
 	} else {
-		TRACE 'File path: ', $blob_or_path;
+		TRACE 'File path: ', $payload;
 		$self->{ua}->default_header( 'content-type' => 'application/octet-stream' );
 	}
 
@@ -351,19 +377,16 @@ sub _post_blob {
 
 	$url .= ($url !~ /\?/ ? '?' : '&') . $self->{auth_string};
 
+	TRACE 'Final URL:', $url;
+
 	my $response = $self->{ua}->post(
 		$url, 
-		(	$isFormData ? 
-			( $blob_or_path ) 
-		:
-			( Content => $blob_or_path )
-		)
+		($isFormData ? $payload : (Content => $payload))
 	);
 
-	INFO Dumper($response);
+	# DEBUG Dumper $response;
 
 	my $res = {
-		url => $url,
 		content => $response->header('content-type') =~ /json/ 
 			? $self->{jsoner}->decode( $response->decoded_content ) 
 			: $response->decoded_content
@@ -371,13 +394,13 @@ sub _post_blob {
 
 	if ($response->is_success) {
 		INFO 'OK';
-		$res->{content} = $self->{jsoner}->decode( $response->decoded_content ),
+		# $res->{content} = $self->{jsoner}->decode( $response->decoded_content ),
 	} else {
 		INFO 'Response: ', $response->status_line;
 		$res->{error} = $response->status_line;
 	}
 
-	# TRACE '_post_blob return: ', $res;
+	TRACE '_post_blob return: ', Dumper $res;
 	return $res;
 }
 
@@ -410,45 +433,125 @@ sub get_geoid2s_for_sku {
 	};
 }
 
-sub create {
-	my $self = shift;
-	$self->_publish_table_to_google();
-	$self->_populate_table_on_google();
-}
 
 # https://developers.google.com/fusiontables/docs/v2/sql-reference
 # https://developers.google.com/fusiontables/docs/v2/using#insertRow
 sub _populate_table_on_google {
+	TRACE 'Enter';
 	my $self = shift;
 	my $url = 'https://www.googleapis.com/fusiontables/v2/query';
 	$self->require_defined_fields(qw/ table_id count skus /);
 
-	# Up to 500 INSERTs 
-	my $statements = 0;
-	my $sql = '';
+	my $statements = 0;	# Up to 500 INSERTs 
+	my $gsql = '';
 	my @res;
 
 	foreach my $sku (@{ $self->{skus} }) {
 		my @geo_id2s = $self->get_geoid2s_for_sku($sku);
 		foreach my $geo_id2 (@geo_id2s) {
 			if ($statements >= 500 ) {
-				push @res, $self->_execute_gsql($sql);
+				TRACE 'Call interim insert';
+				push @res, $self->_execute_gsql($gsql);
 				$statements = 0;
 			}
-			$sql .= sprintf "INSERT INTO %s (GEO_ID2, SKU) VALUES ('%s', '%s');\n",
+			$gsql .= sprintf "INSERT INTO %s (GEO_ID2, SKU) VALUES ('%s', '%s');\n",
 				$self->{table_id}, $geo_id2, $sku;
 		}
 	}
-	push @res, $self->_execute_gsql($sql);
-	TRACE Dumper \@res;
+	TRACE 'Call final insert';
+	push @res, $self->_execute_gsql($gsql);
+	TRACE 'Inserted all rows';
+	INFO Dumper \@res;
 	return @res;
 }
 
+
 sub _execute_gsql {
-	my ($self, $gsql) = @_;
+	my ($self, @gsql) = @_;
 	my $url = 'https://www.googleapis.com/fusiontables/v2/query';
-	INFO "Posting form gSQL to $url";
-	return $self->_post_blob( $url, { sql => $gsql }, 'isFormData' );
+	TRACE "Posting form gSQL to $url";
+	my $res = $self->_post_blob( $url, \@gsql);
+	return $res;
+}
+
+# https://developers.google.com/fusiontables/docs/v2/sql-reference#createView
+sub _create_merge {
+	TRACE 'Enter';
+	my $self = shift;
+	my $new_table_name = 'Table Merge ' . $self->{index_number};
+	my $gsql = "CREATE VIEW '$new_table_name' AS (
+		SELECT * FROM $self->{table_id} AS Skus
+			LEFT OUTER JOIN $self->{us_counties_table_id} AS Map
+				ON Map.GEO_ID2 = Skus.GEO_ID2
+	)";
+	TRACE $gsql;
+	my $res = $self->_execute_gsql($gsql);
+	if ($res->{content} and $res->{content}->{rows}) {
+		return { mergedTableId => $res->{content}->{rows}->[0]->[0] }
+	} else {
+		return $res;
+	}
+}
+
+sub delete {
+	my $self = shift;
+	$self->require_defined_fields('table_id');
+	my $url = 'https://www.googleapis.com/fusiontables/v2/tables/'
+		. $self->{table_id} . '?' . $self->{auth_string};
+	INFO 'Delete ', $url;
+	my $response = $self->{ua}->delete($url);
+	my $res = {
+		url => $url,
+		content => $response->header('content-type') =~ /json/ 
+			? $self->{jsoner}->decode( $response->decoded_content ) 
+			: $response->decoded_content
+	};
+
+	if ($response->is_success) {
+		INFO 'OK';
+	} else {
+		INFO 'Response: ', $response->status_line;
+		$res->{error} = $response->status_line;
+	}
+
+	return $res;
+}
+
+1;
+
+package JsonRealTime;
+
+$|++;
+
+sub new {
+	my ($class, %options) = @_;
+	my $self = { %options };
+	bless $self, $class;
+	return $self;
+}
+
+sub log {
+	my ($self, %params) = @_;
+    $params{message} =~ s/"/\\"/sg;
+	print '{"msg": "', $params{message}, '"}', "\n";
+}
+
+1;
+
+package HtmlRealTime;
+
+$|++;
+
+sub new {
+	my ($class, %options) = @_;
+	my $self = { %options };
+	bless $self, $class;
+	return $self;
+}
+
+sub log {
+	my ($self, %params) = @_;
+	print "<p class='$params{level}>$params{message}</p>\n";
 }
 
 1;
