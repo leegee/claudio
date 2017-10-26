@@ -305,13 +305,34 @@ main {
 
 .page {
     display: none;
-    border: 1px solid gray;
+    border: 1px solid #333;
     padding: 1em;
     margin: 1em 0;
 }
 
+/* trace, debug */
+.loglevel_0 {
+    color: grey;
+}
+/* info */
+.loglevel_1 {
+    color: blue;
+}
+/* warn */
+.loglevel_3 {
+    color: orange;
+}
+/* fatal */
+.loglevel_7 {
+    color: red;
+}
+
 h1, h2, h3, h4, h5, h6 {
     font-family: Pacifico;
+}
+
+.page h1 {
+    font-size: 80%;
 }
 
 header h2 {
