@@ -30,15 +30,6 @@ Log::Log4perl->init(\'
     log4perl.appender.IzelApp.layout.ConversionPattern = %d %m %n
 ');
 
-DEBUG "Init\n";
-print "Here we go\n";
-sleep(10);
-TRACE 'OK';
-print "Here we go 2\n";
-sleep(10);
-TRACE 'DONE';
-exit;
-
 $CGI::POST_MAX = 1024 * 10000;
 $CGI::DISABLE_UPLOADS = 0; 
 

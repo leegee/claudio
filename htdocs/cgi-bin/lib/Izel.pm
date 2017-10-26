@@ -546,12 +546,15 @@ sub new {
 	my ($class, %options) = @_;
 	my $self = { %options };
 	bless $self, $class;
+	$self->{jsoner} = JSON::Any->new;
 	return $self;
 }
 
 sub log {
 	my ($self, %params) = @_;
-	print "<p class='$params{level}>$params{message}</p>\n";
+	$params{message} =~ s/\n/<br>/gs;
+	$params{message} =~ s/"/&quot;/gs;
+	printf "<p class='loglevel_%s'>%s</p>\n", $params{level}, $params{message};
 }
 
 1;
