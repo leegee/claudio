@@ -35,9 +35,9 @@ my $MOCK_RES_CONTENT = {
 $izel->{ua}->map_response(
     qr{$Izel::CONFIG->{endpoints}->{_create_table_on_google}},
     HTTP::Response->new(
-        '200', 
-        'OK', 
-        ['Content-Type' => 'application/json'], 
+        '200',
+        'OK',
+        ['Content-Type' => 'application/json'],
         JSON::Any->objToJson(
             $MOCK_RES_CONTENT->{_create_table_on_google}
         )
@@ -47,9 +47,9 @@ $izel->{ua}->map_response(
 $izel->{ua}->map_response(
     qr{$Izel::CONFIG->{endpoints}->{gsql}},
     HTTP::Response->new(
-        '200', 
-        'OK', 
-        ['Content-Type' => 'application/json'], 
+        '200',
+        'OK',
+        ['Content-Type' => 'application/json'],
         JSON::Any->objToJson(
             $MOCK_RES_CONTENT->{gsql}
         )
@@ -119,9 +119,9 @@ subtest 'compute_fusion_tables' => sub {
 };
 
 # subtest 'get_geoid2s_for_sku' => sub {
-#     @_ = $izel->get_geoid2s_for_sku('ARTHR'), 
+#     @_ = $izel->get_geoid2s_for_sku('ARTHR'),
 #     is $#_, 14-1, 'Gets ARTHR';
-    
+
 # };
 
 # subtest 'foo' => sub {
@@ -132,18 +132,29 @@ subtest 'compute_fusion_tables' => sub {
 subtest 'create_fusion_tables' => sub {
     my $tables = $izel->compute_fusion_tables;
     isa_ok $tables, 'ARRAY', 'rv';
-    # my $path = $tables->[0]->_create_file( sub { $izel->get_geoid2s_for_sku(@_) } );
-    # ok -e $path, 'Created CSV';
-    # throws_ok { $tables->[0]->_create_table_on_google( path => $path ) } qr/Missing fields: auth_string/;
+
+	my @res;
+    subtest 'Table::create' => sub {
+        foreach my $table (@$tables) {
+            isa_ok $table, 'Izel::Table';
+            push @res, $table->create();
+        }
+    };
+
+    subtest 'json index' => sub {
+        my $json = JSON::Any->jsonToObj( $izel->_compose_index_file(@res) );
+        is_deeply $json, {
+            skus2tableIds => {
+                ARTHR => '999',
+                SCSC => '999'
+            },
+            mergedTableIds => [ 1 ]
+        }, 'json index';
+
+    };
+
 };
 
-subtest 'db' => sub {
-    my $CONFIG = $Izel::CONFIG;
-    die Dumper $izel->{dbh}->selectall_arrayref("
-        SELECT $CONFIG->{geosku_table_name}.sku, $CONFIG->{index_table_name}.url
-        FROM $CONFIG->{geosku_table_name} JOIN $CONFIG->{index_table_name}
-    ");
-};
 
 done_testing();
 
