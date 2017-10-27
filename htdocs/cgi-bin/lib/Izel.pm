@@ -11,7 +11,7 @@ use Log::Log4perl ':easy';
 sub require_defined_fields {
 	my ($self, @fields) = @_;
 	my @missing = grep {
-		not exists $self->{$_} 
+		not exists $self->{$_}
 		or not defined $self->{$_}
 	} @fields;
 	LOGCONFESS 'Missing fields: ' . join(', ', @missing) . "\nin " . Dumper($self) if @missing;
@@ -45,6 +45,48 @@ sub date_to_name {
 	return sprintf "%d%02d%02d-%02d%02d%02d/", $year+1900, $mon+1, $mday, $hour, $min, $sec;
 }
 
+sub upload_skus {
+    my $inv = ref($_[0]) || $_[0] eq __PACKAGE__? shift : '';
+    my $args = ref($_[0])? shift : {@_};
+    TRACE 'Enter';
+    my $uploaded_sku_csv_path = 'latest_skus.csv';
+    $args->{skus_text} ||= [];
+    if (not ref $args->{skus_text}){
+        $args->{skus_text} = [ $args->{skus_text}.split(/[,\W]+/) ]
+    }
+
+    binmode $args->{skus_file_handle};
+
+    TRACE 'Process skus' . ($args->{skus_text} || '');
+    TRACE 'Write uploaded skus to ', $uploaded_sku_csv_path;
+
+    open my $OUT,">:utf8", $uploaded_sku_csv_path or LOGDIE "$! - $uploaded_sku_csv_path";
+
+    my $io_handle = $args->{skus_file_handle}->handle;
+    binmode $io_handle;
+
+    while (my $bytesread = $io_handle->read(my $buffer,1024)) {
+        print $OUT $buffer;
+    }
+
+    close $OUT;
+    close $args->{skus_file_handle};
+
+    TRACE 'Finished writing uploaded skus to file';
+    TRACE 'Call create_fusion_csv_multiple';
+
+    my $jsonRes = Izel->new(
+        auth_string          => $args->{auth_string},
+    )->create(
+        skus2fips_csv_path   => $uploaded_sku_csv_path,
+        output_dir	    	 => $args->{output_dir},
+        include_only_skus    => $args->{skus_text}
+    );
+
+    TRACE 'Done upload_skus';
+    return $jsonRes;
+}
+
 sub new {
 	my $inv  = shift;
 	my $args = ref($_[0])? shift : {@_};
@@ -75,7 +117,7 @@ Accepts:
 
 =item C<include_only_skus>
 
-Optional array of SKUs by which to filter. If this option is supplied, SKUs in C<county_distributino_path> 
+Optional array of SKUs by which to filter. If this option is supplied, SKUs in C<county_distributino_path>
 that do not match an entry will be ignored.
 
 =item  C<sku2latin_path>
@@ -141,7 +183,7 @@ sub _compose_index_file {
 	my ($self, @res) = @_;
     my @skus2table_ids = $self->{dbh}->selectall_array("
         SELECT DISTINCT $CONFIG->{geosku_table_name}.sku AS sku, $CONFIG->{index_table_name}.url AS table_id
-        FROM $CONFIG->{geosku_table_name} 
+        FROM $CONFIG->{geosku_table_name}
         JOIN $CONFIG->{index_table_name}
     ");
 
@@ -196,7 +238,7 @@ sub load_geo_sku_from_csv {
 			$count ++;
 		}
 	}
-	
+
 	close $IN;
 	return $count;
 }
@@ -205,7 +247,7 @@ sub get_dir_from_path {
 	my ($self, $path) = @_;
 	my ($dir, $ext) = $path =~ /^(.+?)(\.[^.]+)?$/;
 	return $dir;
-}	
+}
 
 sub get_dbh {
 	my ($self, $wipe) = @_;
@@ -235,8 +277,8 @@ sub get_dbh {
 			$self->{dbh}->do($statement);
 		}
 		$self->{created_db} = 1;
-	} 
-	
+	}
+
 	else {
 		$self->{created_db} = 0;
 	}
@@ -281,7 +323,7 @@ sub compute_fusion_tables {
 			$table_index ++;
 			$tables->[$table_index] = Izel::Table->new( $table_args );
 		}
-		$tables->[$table_index]->add_count( 
+		$tables->[$table_index]->add_count(
 			count => $record->[0],
 			sku => $record->[1],
 		);
@@ -311,12 +353,12 @@ sub new {
 	my $args = ref($_[0])? shift : {@_};
 	$TABLES_CREATED ++;
 	$args->{ua} ||= LWP::UserAgent->new;
-	
+
 	my $self = {
 		%$args,
 		jsoner	=> JSON::Any->new,
 		sth		=> {},
-		count => 0, 
+		count => 0,
 		skus => [],
 		index_number => exists($args->{index_number}) ? $args->{index_number} : ($TABLES_CREATED),
 	};
@@ -337,7 +379,7 @@ sub create {
 	my $self = shift;
 	$self->_create_table_on_google();
 	$self->_populate_table_on_google();
-	
+
 	$self->_create_merge();
 
 	$self->_update_skus_merged_table_id();
@@ -356,11 +398,11 @@ sub _update_skus_merged_table_id {
 	$self->{merged_table_id} = $self->{dbh}->last_insert_id( undef, undef, $CONFIG->{index_table_name}, undef );
 
 	$self->{sth}->{update_skus_merged_table_id} ||= $self->{dbh}->prepare_cached("
-		UPDATE $CONFIG->{geosku_table_name} 
+		UPDATE $CONFIG->{geosku_table_name}
 		SET merged_table_id = ?
 		WHERE sku = ?
 	");
-	
+
 	foreach my $sku (@{ $self->{skus}}) {
 		$self->{sth}->{update_skus_merged_table_id}->execute(
 			$self->{merged_table_id},
@@ -384,7 +426,7 @@ sub _create_table_on_google {
 		name => $self->{name},
 		isExportable => 'true',
 		description => 'Table ' . $self->{index_number},
-		columns => [ 
+		columns => [
 			{
 				name => "GEO_ID2",
 				type => "STRING",
@@ -420,7 +462,7 @@ sub _post_blob {
 	if (ref $payload) {
 		if (ref $payload eq 'ARRAY') {
 			TRACE 'Is form data';
-			$payload = { 
+			$payload = {
 				sql => join " ; ", @$payload
 			};
 			$isFormData = 1;
@@ -442,15 +484,15 @@ sub _post_blob {
 	TRACE 'Final URL:', $url;
 
 	my $response = $self->{ua}->post(
-		$url, 
+		$url,
 		($isFormData ? $payload : (Content => $payload))
 	);
 
 	# DEBUG Dumper $response;
 
 	my $res = {
-		content => $response->header('content-type') =~ /json/ 
-			? $self->{jsoner}->decode( $response->decoded_content ) 
+		content => $response->header('content-type') =~ /json/
+			? $self->{jsoner}->decode( $response->decoded_content )
 			: $response->decoded_content
 	};
 
@@ -471,7 +513,7 @@ sub upload_csv_rows {
 	my ($self, $path) = @_;
 	TRACE "Enter upload_csv_rows with ", $path;
 	$self->require_defined_fields('table_id');
-			   
+
     my $url = 'https://www.googleapis.com/upload/fusiontables/v2/tables/'
 		. $self->{table_id} . '/import?uploadType=media';
 
@@ -487,10 +529,10 @@ sub get_geoid2s_for_sku {
 		"SELECT GEO_ID2 FROM $CONFIG->{geosku_table_name} WHERE sku = ?"
 	);
 	return map {$_->[0]} @{
-		$self->{dbh}->selectall_arrayref( 
+		$self->{dbh}->selectall_arrayref(
 			$self->{sth}->{get_geoid2s_for_sku},
-			{}, 
-			$sku 
+			{},
+			$sku
 		)
 	};
 }
@@ -503,7 +545,7 @@ sub _populate_table_on_google {
 	my $self = shift;
 	$self->require_defined_fields(qw/ table_id count skus /);
 
-	my $statements = 0;	# Up to 500 INSERTs 
+	my $statements = 0;	# Up to 500 INSERTs
 	my $gsql = '';
 	my @res;
 
@@ -562,8 +604,8 @@ sub delete {
 	my $response = $self->{ua}->delete($url);
 	my $res = {
 		url => $url,
-		content => $response->header('content-type') =~ /json/ 
-			? $self->{jsoner}->decode( $response->decoded_content ) 
+		content => $response->header('content-type') =~ /json/
+			? $self->{jsoner}->decode( $response->decoded_content )
 			: $response->decoded_content
 	};
 
