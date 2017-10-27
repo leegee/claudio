@@ -1,21 +1,22 @@
 <!doctype html>
 <html class="no-js" lang="en">
-    <head>
-        <meta charset="utf-8">
-        <title>Map Uploader</title>
 
-        <meta name="description" content="">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta http-equiv="x-ua-compatible" content="ie=edge">
-        <link rel="apple-touch-icon" href="icon.png">
+<head>
+    <meta charset="utf-8">
+    <title>Map Uploader</title>
 
-        <link rel="stylesheet" href="css/normalize.css">
-        <link rel="stylesheet" href="css/main.css">
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/2.3.0/mustache.min.js"></script>
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <link rel="apple-touch-icon" href="icon.png">
 
-        <meta name="google-signin-client_id" content="837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com">
+    <link rel="stylesheet" href="css/normalize.css">
+    <link rel="stylesheet" href="css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/2.3.0/mustache.min.js"></script>
 
-        <script>
+    <meta name="google-signin-client_id" content="837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com">
+
+    <script>
         var Config = {
             apikey: 'AIzaSyDAdOILIN2SPM_1iPKJMbHd9jOck8H9J7o',
             clientId: '837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com',
@@ -31,7 +32,7 @@
             }
         };
 
-        var authorise = function () {
+        var ENTER = function () {
             gapi.auth.authorize({
                 client_id: Config.clientId,
                 scope: Config.scopes,
@@ -42,17 +43,18 @@
         var handleAuthResult = function (authResult) {
             console.log('authResult = ', authResult);
             if (authResult && !authResult.error) {
-                window.wizard = new Wizard({ 
+                window.wizard = new Wizard({
                     indexJsDir: '/temp/' + new Date().toISOString().replace(/\W/g, '_'),
-                    access_token: authResult.access_token 
+                    access_token: authResult.access_token
                 });
                 window.wizard.nextPage();
             } else {
                 console.log('Not authorised');
                 var el = document.getElementById('authButton');
                 // No access token could be retrieved, show the button to start the authorization flow.
-                el.addEventListener('click', authorise);
+                el.addEventListener('click', ENTER);
                 el.setAttribute('style', 'display:block');
+                window.wizard.gotoPage('manual-auth');
             }
         };
 
@@ -67,35 +69,36 @@
             return (await response.json()).items;
         }
 
-        var page1 = async function () {
-            window.wizard.fusionTableDetails = await asyncListTables();
-            window.wizard.nextPage();
-        }
+        var page2 = async function () {
+            console.log('Enter page1');
+            //     window.wizard.fusionTableDetails = await asyncListTables();
+            //     window.wizard.nextPage();
+            // }
 
-        var page2 = function () {
+            // var page2 = function () {
             document.getElementById('skusCsv').addEventListener('change', function () {
-                window.wizard.skusToProcess = document.getElementById('skusToProcess').value;
-                window.wizard.file = this.files[0];
+                window.wizard.state.skusToProcess = document.getElementById('skusToProcess').value;
+                window.wizard.state.file = this.files[0];
                 window.wizard.nextPage();
             }, false);
             // document.getElementById('selectFusionTable').addEventListener('click', function () {
             //     var selectList = document.getElementById('fusionTableIds');
-            //     window.wizard.tableId = selectList.options[ selectList.selectedIndex ].value;
-            //     window.wizard.gotoPageName('merge');
+            //     window.wizard.state.tableId = selectList.options[ selectList.selectedIndex ].value;
+            //     window.wizard.gotoPage('merge');
             // });
         }
 
         var page3 = function () {
             document.getElementById('cancel-skus').addEventListener('click', document.location.reload, false);
-            document.getElementById('upload-skus').addEventListener('click', () => {window.wizard.nextPage()}, false);
-        }            
+            document.getElementById('upload-skus').addEventListener('click', () => { window.wizard.nextPage() }, false);
+        }
 
         /**
         * Before the cx closes, server will respond with HTML status updates.
         */
         var page4 = function () {
             console.log('Enter page4 to send to CGI');
-            var buffer = '', 
+            var buffer = '',
                 data = new FormData(),
                 logwindow = document.getElementById('logWindow'),
                 request = new XMLHttpRequest(),
@@ -103,16 +106,16 @@
                     logwindow.innerHTML = html;
                     logwindow.scrollTop = logwindow.scrollHeight - logwindow.clientHeight;
                 }
-            ;
-            
-            data.append('skus-text', window.wizard.skusToProcess);
-            data.append('skus-file', window.wizard.file);
-            data.append('index_js_dir', window.wizard.indexJsDir );
-            
+                ;
+
+            data.append('skus-text', window.wizard.state.skusToProcess);
+            data.append('skus-file', window.wizard.state.file);
+            data.append('index_js_dir', window.wizard.state.indexJsDir);
+
             request.onreadystatechange = () => {
                 if (request.responseText.length) {
                     show(request.responseText);
-                } 
+                }
                 if (request.readyState === XMLHttpRequest.DONE) {
                     console.log('CGI processing and Google processing complete.');
                     displayIndexJsDir();
@@ -125,21 +128,21 @@
         }
 
         var page6 = function () {
-            console.log('page 6: ', window.wizard.indexJsDir);
+            console.log('page 6: ', window.wizard.state.indexJsDir);
         }
 
         var displayIndexJsDir = async function () {
-            var  response = await window.fetch(
-                window.wizard.indexJsDir + '/index.js'
+            var response = await window.fetch(
+                window.wizard.state.indexJsDir + '/index.js'
             );
-            window.wizard.indexJs = await response.json();
-            window.wizard.gotoPageName('processing-complete');
+            window.wizard.state.indexJs = await response.json();
+            window.wizard.gotoPage('review-indexes');
         }
 
-
-        var Wizard = function (options) {
-            Object.keys(options).forEach( (key) => {
-                this[key] = options[key];
+        var Wizard = function (state) {
+            this.state = {}; // window.history.popstate();?
+            Object.keys(state).forEach((key) => {
+                this.state[key] = state[key];
             });
             this.page = 0;
             this.el = {
@@ -149,170 +152,222 @@
             this.el.main.setAttribute('style', 'display:block"');
             this.el.pageNumber.setAttribute('style', 'display:block"');
             this.pageIds = [];
-            document.querySelectorAll('script[type="text/mustache"]').forEach( (el) => {
+            document.querySelectorAll('script[type="text/mustache"]').forEach((el) => {
                 var id = el.id.match(/^page-(\d+)$/)[1];
-                this.pageIds.push( Number( id ) );
+                this.pageIds.push(Number(id));
             });
-            this.pageIds = this.pageIds.sort( function (a,b) { return a > b });
+            this.pageIds = this.pageIds.sort(function (a, b) { return a > b });
             console.log('Page IDs:', this.pageIds);
+            window.popstate = (e) => {
+                console.log('POPSTATE ', e);
+                return false;  //pushstate
+            };
         }
 
         /**
-         * Show a numbered page that also has data-name attribute that equates to the passed pageName argument
-         * 
-         * @param {string} pageName - string matching an element's `data-name` attribute.
+         * Show a numbered page that also has data-page-name attribute that equates to the passed pageName argument,
+         * or a specific number.
+         *
+         * @param {string} pageName - string matching an element's `data-page-name` attribute.
          * @returns void
          */
-        Wizard.prototype.gotoPageName = function (pageName) {
-            console.log('Wizard ', this, ' page ', this.page, ' to named page ', pageName);
-            var pageNumber = document.querySelector('script[type="text/mustache"][data-name="' + pageName + '"]').id.match(/^page-(\d+)$/)[1];
-            this.nextPage( pageNumber );
+        Wizard.prototype.gotoPage = function (pageName) {
+            var pageNumber = Number(pageName) ? pageName : this.findPageNumber(pageName);
+            console.log('Wizard gotoPage, from ', this.page, ' to page ', pageName, ' which I thin is ', pageNumber);
+            this.nextPage(pageNumber);
+        }
+
+        Wizard.prototype.findPageNumber = function (pageName) {
+            var rv;
+            try {
+                rv = document.querySelector('script[type="text/mustache"][data-page-name="' + pageName + '"]').id.match(/^page-(\d+)$/)[1]
+            } catch (e) {
+                console.log('No such page as ', pageName);
+                rv = null;
+            }
+            console.log('FindPageNumber found for page %s page number %d', pageName, rv);
+            return rv;
         }
 
         /**
          * Hides the current page, and processes and shows the template for the element
-         * for the page element whose * `id` attribute matches 
+         * for the page element whose * `id` attribute matches
          * the prefix `page-` suffixed with the incremented page number. If a function
-         * exists matching the suffix `page` with the prefix of the page number, it 
+         * exists matching the suffix `page` with the prefix of the page number, it
          * will be called after the template has been processed and displayed.
-         * 
+         *
          * If the numbered page does not exist, the page with the next-highest number is shown.
-         * 
+         *
+         * Also, if no arg supplied, tries to find data-next-page='name|number' from the current page.
+         *
          * @param {number} [pageNumber] - Optional page number to which to jump.
          * @return void
          */
         Wizard.prototype.nextPage = function (pageNumber) {
-        pageNumber = pageNumber || this.page + 1;
-        var pageEl = document.getElementById('page-' + pageNumber);
-        if (! pageEl) {
-            for (var i = 0; i < this.pageIds.length; i ++) {
-                if (this.pageIds[i] > pageNumber) {
-                    pageNumber = this.pageIds[i];
-                    pageEl = document.getElementById('page-' + pageNumber);
-                    break;
+            if (!pageNumber) {
+                console.log('no pageNumber arg');
+                var el = document.getElementById('page-' + this.page);
+                if (el && el.dataset && el.dataset.nextPage) {
+                    pageNumber = this.findPageNumber(el.dataset.nextPage);
+                    console.log('set pageNumber from nextPage; is now ', pageNumber);
+                } else {
+                    console.log('no existing page/with nextPage, ', this.page);
+                    pageNumber = Number(this.page) + 1;
+                    console.log('inc pageNumber to ', pageNumber);
+                }
+
+                console.log('no pageNumber arg');
+            }
+
+            var pageEl = document.getElementById('page-' + pageNumber);
+            if (!pageEl) {
+                for (var i = 0; i < this.pageIds.length; i++) {
+                    if (this.pageIds[i] > pageNumber) {
+                        pageNumber = this.pageIds[i];
+                        pageEl = document.getElementById('page-' + pageNumber);
+                        break;
+                    }
+                }
+                if (!pageEl) {
+                    this.el.main.innerHTML = '<h2>Error</h2><p>Could not find the requested page, ' + pageNumber + '</p>';
+                    return;
                 }
             }
-            if (! pageEl) {
-                this.el.main.innerHTML = '<h2>Error</h2><p>Could not find the requested page, ' + pageNumber + '</p>';
-                return;
-            }
-        }
 
-        console.log('Wizard ', this, 'from page', this.page, 'to page number ', pageNumber);
-        this.page = pageNumber;
+            console.log('Wizard.nextPage from page', this.page, 'to page number ', pageNumber);
+            this.page = pageNumber;
 
             try {
                 this.el.main.innerHTML = Mustache.render(
-                    pageEl.innerHTML.toString(), 
-                    {Config: Config, wizard: wizard}
+                    pageEl.innerHTML.toString(),
+                    { Config: Config, wizard: wizard }
                 );
                 this.el.pageNumber.innerText = this.page;
+                var links = document.querySelectorAll('[data-goto-page]');
+                for (var el of links) {
+                    el.onclick = (e) => {
+                        window.wizard.gotoPage(e.target.dataset.gotoPage)
+                    };
+                };
             } catch (e) {
                 console.error(e);
             }
-            
+
+            window.location.hash = this.page;
+            window.history.pushState( this.state, 'Page '+this.page, window.location.toString() );
+
             var fn = 'page' + this.page;
             if (typeof window[fn] === 'function') {
-                window[fn]( arguments );
+                window[fn](arguments);
             }
             console.log('Page = ', this.page);
         }
-       </script>
+    </script>
 
-        <script type='text/mustache' id='page-1'>
-            <p>
-                <button id='authButton' name='authButton'>Log In</button>
-            </p>
-        </script>
+    <script type='text/mustache' id='page-100' data-page-name='manual-auth'>
+        <p>
+            <button id='authButton' name='authButton'>Log In</button>
+        </p>
+    </script>
 
-        <script type='text/mustache' id='page-2'>
-            <p>
-                We have too much data to fit into a single Fusion table, so this
-                app creates several tables and an index which is referenced by
-                the map pages.
-            </p>
-            <fieldset>
-                <div id='enterSkusToProcess'>
-                    <p><label for='skusToProess'>Please enter a list of USDA symbols/SKUs to proceess. Separate mulitple values with spaces and/or commas.</p>
-                    <p><textarea id='skusToProcess' name='skusToProcess'></textarea>
-                </div>
-            </fieldset>
-            <fieldset>
-                <div id='selectCsv'>
-                    <p><label for='skusCsv'>To create a new Fusion Table, select a SKU CSV file from your local machine:</label></p>
-                    <p><input type='file' name='skusCsv' id='skusCsv' placeholder='SKUs CSV' type='.csv'></p>
-                </div>
-                <div id='listFusionTables' style='display:none'>
-                    <p>Or choose an existing Fusion Table from this list of tables stored in your Google account:</p>
-                    <select id='fusionTableIds' name='fusionTableIds'>
-                        {{#wizard.fusionTableDetails}}
-                            <option value='{{tableId}}'>{{name}} - {{description}}</option>
-                        {{/wizard.fusionTableDetails}}
-                    </select>
-                    <button id='selectFusionTable' name='selectFusionTable'>Choose</button>
-                </fieldset>
+    <script type='text/mustache' id='page-1'>
+        <p>
+            We have too much data to fit into a single Fusion table, so this
+            app creates several tables and an index which is referenced by
+            the map pages.
+        </p>
+        <ul>
+            <li data-goto-page='select-skus'>Uupload SKU geography</lia>
+            <li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li>
+        </ul>
+    </script>
+
+    <script type='text/mustache' id='page-2' data-page-name='select-skus'>
+        <fieldset>
+            <legend>Upload SKU Geography</legend>
+            <div id='enterSkusToProcess'>
+                <p><label for='skusToProess'>Please enter a list of USDA symbols/SKUs to proceess. Separate mulitple values with spaces and/or commas.</p>
+                <p><textarea id='skusToProcess' name='skusToProcess'></textarea>
             </div>
-        </script>
+            <div id='selectCsv'>
+                <p><label for='skusCsv'>To create a new Fusion Table, select a SKU CSV file from your local machine:</label></p>
+                <p><input type='file' name='skusCsv' id='skusCsv' placeholder='SKUs CSV' type='.csv'></p>
+            </div>
+            <div id='listFusionTables' style='display:none'>
+                <p>Or choose an existing Fusion Table from this list of tables stored in your Google account:</p>
+                <select id='fusionTableIds' name='fusionTableIds'>
+                    {{#wizard.fusionTableDetails}}
+                        <option value='{{tableId}}'>{{name}} - {{description}}</option>
+                    {{/wizard.fusionTableDetails}}
+                </select>
+                <button id='selectFusionTable' name='selectFusionTable'>Choose</button>
+            </fieldset>
+        </div>
+    </script>
 
-        <script type='text/mustache' id='page-3'>
-            Page 3. 
-            <div id='meta'>
-                <p>USDA SKUs to process:</p>
-                <p>{{window.wizard.skusToProcess}}</p>
-            <dl>
-                <dt>Name<dt><dd>{{wizard.file.name}}</dd>
-                <dt>Size<dt><dd>{{wizard.file.size}}</dd>
-                <dt>Last Modified<dt><dd>{{wizard.file.lastModifiedDate}}</dd>
-            </dl>
-            <button id="upload-skus">Add this file's skus to the map</button>
-            <button id="cancel-skus">Cancel</button>
-        </script>
+    <script type='text/mustache' id='page-3' data-page-name='upload'>
+        Page 3.
+        <div id='meta'>
+            <p>USDA SKUs to process:</p>
+            <p>{{wizard.state.skusToProcess}}</p>
+        <dl>
+            <dt>Name<dt><dd>{{wizard.state.file.name}}</dd>
+            <dt>Size<dt><dd>{{wizard.state.file.size}}</dd>
+            <dt>Last Modified<dt><dd>{{wizard.state.file.lastModifiedDate}}</dd>
+        </dl>
+        <button id="upload-skus">Add this file's skus to the map</button>
+        <button id="cancel-skus">Cancel</button>
+    </script>
 
-        <script type='text/mustache' id='page-4'>
-            <p> Creating maps... </p>
-            <div id='logWindow'></div>
-        </script>
+    <script type='text/mustache' id='page-4'>
+        <p> Creating maps... </p>
+        <div id='logWindow'></div>
+    </script>
 
-        <script type='text/mustache' id='page-10' data-name='processing-complete'>
-            <p>
-                JSON index: <a href='{{wizard.indexJsDir}}'>{{wizard.indexJsDir}}</a>
-            </p>
-            {{#wizard.indexJs.mergedTableIds}}
-                <h3><a href="https://fusiontables.google.com/DataSource?docid={{.}}#map:id=3>Map {{}}</a>
-            {{/wizard.indexJs.mergedTableIds}}
-        </script>
+    <script type='text/mustache' id='page-10' data-page-name='review-indexes'>
+        <p>
+            JSON index: <a href='{{wizard.state.indexJsDir}}'>{{wizard.state.indexJsDir}}</a>
+        </p>
+        {{#wizard.state.indexJs.mergedTableIds}}
+            <h3><a href="https://fusiontables.google.com/DataSource?docid={{.}}#map:id=3>Map {{}}</a>
+        {{/wizard.state.indexJs.mergedTableIds}}
+    </script>
 
-    </head>
-    <body>
-        <!--[if lte IE 9]>
+</head>
+
+<body>
+    <!--[if lte IE 9]>
             <p class="browserupgrade">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience and security.</p>
         <![endif]-->
 
-        <header>
-            <h1>Map Updater <span id='pageNumber'>1</span></h1>
-        </header>
+    <header>
+        <h1>Map Updater
+            <span id='pageNumber'>1</span>
+        </h1>
+    </header>
 
-        <main id='main'>
-            <p>
-                Welcome to the map making page.
-            </p>
-            <p>
-                Authorising with Google....
-            </p>
-            <p>
-                <button style='display:none' id='authButton' name='authButton'>Log In</button>
-            </p>
-        </main>
+    <main id='main'>
+        <p>
+            Welcome to the map making page.
+        </p>
+        <p>
+            Authorising with Google....
+        </p>
+        <p>
+            <button style='display:none' id='authButton' name='authButton'>Log In</button>
+        </p>
+    </main>
 
 
-        <!-- Google Analytics: change UA-XXXXX-Y to be your site's ID.
+    <!-- Google Analytics: change UA-XXXXX-Y to be your site's ID.
         <script>
             window.ga=function(){ga.q.push(arguments)};ga.q=[];ga.l=+new Date;
             ga('create','UA-XXXXX-Y','auto');ga('send','pageview')
-        </script> 
+        </script>
         <script src="https://www.google-analytics.com/analytics.js" async defer></script>
         -->
 
-        <script src="https://apis.google.com/js/client.js?onload=authorise"></script>
-    </body>
+    <script src="https://apis.google.com/js/client.js?onload=ENTER"></script>
+</body>
+
 </html>
