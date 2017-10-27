@@ -136,22 +136,38 @@ sub create {
 	return $self->create_index_file(@res);
 }
 
-sub create_index_file {
-	my ($self, @res) = @_;
 
-	my $json = $self->{jsoner}->encode( {
-		mergedTableIds => \@res 
+sub _compose_index_file {
+	my ($self, @res) = @_;
+    my @skus2table_ids = $self->{dbh}->selectall_array("
+        SELECT DISTINCT $CONFIG->{geosku_table_name}.sku AS sku, $CONFIG->{index_table_name}.url AS table_id
+        FROM $CONFIG->{geosku_table_name} 
+        JOIN $CONFIG->{index_table_name}
+    ");
+
+	my $json = $self->{jsoner}->encode({
+		mergedTableIds => \@res,
+		skus2tableIds  =>  {
+			map { $_->[0] => $_->[1] } @skus2table_ids
+		}
 	});
 
-	# SELECT $CONFIG->{geosku_table_name}.sku, $CONFIG->{index_table_name}.url
-	# FROM $CONFIG->{geosku_table_name} JOIN $CONFIG->{index_table_name}
+	return $json;
+}
 
-	INFO "Create $self->{output_dir}/index.js";
+sub create_index_file {
+	my ($self, @res) = @_;
+	my $json = $self->_compose_index_file(@res);
+	return $self->_write_index_file($json);
+}
+
+sub _write_index_file {
+	my ($self, $json) = @_;
+	TRACE "Create $self->{output_dir}/index.js";
 	open my $FH, ">:encoding(utf8)", "$self->{output_dir}/index.js" or die "$! - $self->{output_dir}/index.js";
 	print $FH $json;
 	close $FH;
-
-	INFO 'Done, leave Izel::create';
+	INFO "Created $self->{output_dir}/index.js";
 	return $json;
 }
 
