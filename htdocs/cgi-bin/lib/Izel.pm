@@ -26,7 +26,7 @@ require  DBI;
 require  JSON::Any;
 require  Text::CSV_XS;
 
-my $US_COUNTIES_TABLE_ID = '1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV';
+my $DEFAULT_US_COUNTIES_TABLE_ID = '1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV';
 my $TOTAL_COUNTIES_IN_USA = 3_007;
 my $FUSION_TABLE_LIMIT = 100_000;
 
@@ -43,6 +43,12 @@ our $CONFIG = {
 sub date_to_name {
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
 	return sprintf "%d%02d%02d-%02d%02d%02d/", $year+1900, $mon+1, $mday, $hour, $min, $sec;
+}
+
+sub publish_index {
+	my $inv = ref($_[0]) || $_[0] eq __PACKAGE__? shift : '';
+	my $args = ref($_[0])? shift : {@_};
+	File::Copy::move( $args->{from}, $args->{to} );
 }
 
 sub upload_skus {
@@ -90,9 +96,9 @@ sub upload_skus {
 sub new {
 	my $inv  = shift;
 	my $args = ref($_[0])? shift : {@_};
+	$args->{us_counties_table_id} ||= $DEFAULT_US_COUNTIES_TABLE_ID;
 	my $self = {
 		%$args,
-		us_counties_table_id => $US_COUNTIES_TABLE_ID,
 		jsoner	=> JSON::Any->new,
 		sth		=> {},
 	};
