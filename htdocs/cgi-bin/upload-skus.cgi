@@ -35,33 +35,31 @@ $CGI::DISABLE_UPLOADS = 0;
 
 my $UPLOADED_SKU_CSV = 'latest_skus.csv';
 
-my $merged_geo_skus_dir = "temp/skus_" . Izel->date_to_name();
+LOGDIE 'No $ENV{DOCUMENT_ROOT}' if not $ENV{DOCUMENT_ROOT};
 
-my $final = main();
-print "$final\n\r\n\r";
+my @final = main();
+print join @final, "\n", "\n\r\n\r";
 exit;
 
 sub main {
     my $cgi = CGI->new;
-    my $auth_string = $ENV{QUERY_STRING};
 
-    my @missing;
-    if (! defined $cgi->param('skus-text')) {
-        push @missing, 'skus-text';
-    }
+    my @missing = grep {! $cgi->param($_) } qw/ skus-file index_js_dir /;
+
     my $IN  = $cgi->upload('skus-file');
+
     if (! defined $IN) {
         push @missing, 'skus-file';
     }
-    
     if (@missing) {
         return 'Missing params: ', join ', ', @missing;
     }
+
     binmode $IN;
 
     TRACE 'Process skus' . ($cgi->param('skus-text') || '');
-
     TRACE 'Write uploaded skus to ', $UPLOADED_SKU_CSV;
+
     open my $OUT,">:utf8", $UPLOADED_SKU_CSV or LOGDIE "$! - $UPLOADED_SKU_CSV";
     my $io_handle = $IN->handle;
     binmode $io_handle;
@@ -73,17 +71,15 @@ sub main {
     close $IN;
     TRACE 'Finished writing uploaded skus to file';
     
-
     TRACE 'Call create_fusion_csv_multiple';
     my $skus = $cgi->param('skus-text')? [$cgi->param('skus-text').split(/[,\W]+/)] : [];
     
     my $jsonRes = Izel->new(
-        auth_string                 => $auth_string,
-    )->update(
-        county_distributions_path   => $UPLOADED_SKU_CSV, # $counties,
-        # sku2latin_path              => 
-        output_path	    	        => $merged_geo_skus_dir,
-        include_only_skus           => $skus
+        auth_string          => $ENV{QUERY_STRING},
+    )->create(
+        skus2fips_csv_path   => $UPLOADED_SKU_CSV,
+        output_dir	    	 => $ENV{DOCUMENT_ROOT} . $cgi->param('index_js_dir'),
+        include_only_skus    => $skus
     );
 
     return $jsonRes;

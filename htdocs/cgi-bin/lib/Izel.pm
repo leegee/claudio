@@ -19,12 +19,12 @@ sub require_defined_fields {
 
 package Izel;
 use base 'IzelBase';
-use File::Temp ();
 use Data::Dumper;
 use Encode;
 use Log::Log4perl ':easy';
-use DBI;
-use JSON::Any;
+require  DBI;
+require  JSON::Any;
+require  Text::CSV_XS;
 
 my $US_COUNTIES_TABLE_ID = '1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV';
 my $TOTAL_COUNTIES_IN_USA = 3_007;
@@ -58,7 +58,7 @@ sub new {
 	return bless $self, ref($inv) ? ref($inv) : $inv;
 }
 
-=head2 update
+=head2 create
 
 Creates multiple CSVs and a JSON index of which SKU is in
 which CSV, because Fusion Tables only imports small CSVs at
@@ -77,7 +77,7 @@ that do not match an entry will be ignored.
 
 UNUSED - A CSV of C<SKU,Latin> Name.
 
-=item C<county_distributions_path>
+=item C<skus2fips_csv_path>
 
 A bar-delimited list of SKU|FIPS, one per line: C<CSC|53007>.
 
@@ -85,14 +85,14 @@ A bar-delimited list of SKU|FIPS, one per line: C<CSC|53007>.
 
 Defaults to 5.
 
-=item C<output_path>
+=item C<output_dir>
 
 Directory.
 
 =cut
 
-sub update {
-	TRACE "Enter";
+sub create {
+	TRACE "Enter Izel::create";
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
 
@@ -110,12 +110,13 @@ sub update {
 	my $initials_count = {};
 
 	$self->load_geo_sku_from_csv(
-		path				=> $args->{county_distributions_path},
+		path				=> $args->{skus2fips_csv_path},
 		separator			=> $args->{separator},
 		include_only_skus	=> $args->{include_only_skus},
 	);
 
-	$self->{output_dir} = $self->get_dir_from_path( $args->{output_path} );
+	$self->{output_dir} = $args->{output_dir};
+
 	if (!-d $self->{output_dir}) {
 		mkdir $self->{output_dir} or die "$! - $self->{output_dir}";
 	}
@@ -127,18 +128,24 @@ sub update {
 		push @res, $table->create();
 	}
 
-	# TRACE 'Responses: ', Dumper(\@res);
+	return $self->create_index(@res);
+}
 
-	# my $jsonRes = $self->{jsoner}->encode( {
-	# 	res => \@res
-	# });
+sub create_index {
+	my ($self, @res) = @_;
+	INFO 'Responses: ', Dumper(\@res);
 
-	# INFO "Create $self->{output_dir}/index.js";
-	# open my $FH, ">:encoding(utf8)", "$self->{output_dir}/index.js" or die "$! - $self->{output_dir}/index.js";
-	# print $FH $jsonRes;
-	# close $FH;
+	my $jsonRes = $self->{jsoner}->encode( {
+		mergedTableIds => \@res 
+	});
 
-	# return $jsonRes;
+	INFO "Create $self->{output_dir}/index.js";
+	open my $FH, ">:encoding(utf8)", "$self->{output_dir}/index.js" or die "$! - $self->{output_dir}/index.js";
+	print $FH $jsonRes;
+	close $FH;
+
+	INFO 'Done, leave Izel::create';
+	return $jsonRes;
 }
 
 sub load_geo_sku_from_csv {
@@ -255,11 +262,8 @@ use base 'IzelBase';
 use LWP::UserAgent();
 use JSON::Any;
 use Log::Log4perl ':easy';
-use File::Temp ();
-use Text::CSV_XS;
 use Data::Dumper;
 
-my $CSV_EOL = "\n";
 my $TABLES_CREATED = -1;
 
 sub RESET  {
@@ -279,7 +283,6 @@ sub new {
 		count => 0, 
 		skus => [],
 		index_number => exists($args->{index_number}) ? $args->{index_number} : ($TABLES_CREATED),
-		output_dir => $args->{output_dir} || File::Temp::tempdir( CLEANUP => 0 ),
 	};
 
 	$self->{ua}->timeout(30);
@@ -287,6 +290,9 @@ sub new {
 	$self->{name} = $args->{name} || 'Table #' . $self->{index_number};
 
 	$self = bless $self, ref($inv) ? ref($inv) : $inv;
+
+	$self->require_defined_fields('output_dir');
+
 	return $self;
 }
 
@@ -487,7 +493,7 @@ sub _create_merge {
 	TRACE $gsql;
 	my $res = $self->_execute_gsql($gsql);
 	if ($res->{content} and $res->{content}->{rows}) {
-		return { mergedTableId => $res->{content}->{rows}->[0]->[0] }
+		return $res->{content}->{rows}->[0]->[0];
 	} else {
 		return $res;
 	}
