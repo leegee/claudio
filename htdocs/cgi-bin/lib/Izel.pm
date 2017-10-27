@@ -31,8 +31,13 @@ my $TOTAL_COUNTIES_IN_USA = 3_007;
 my $FUSION_TABLE_LIMIT = 100_000;
 
 our $CONFIG = {
-	geosku_table_name => 'geosku',
-	db_path => 'sqlite.db',
+	geosku_table_name	=> 'geosku',
+	index_table_name	=> 'table_index',
+	db_path				=> 'sqlite.db',
+	endpoints			=> {
+		_create_table_on_google	=> 'https://www.googleapis.com/fusiontables/v2/tables',
+		gsql => 'https://www.googleapis.com/fusiontables/v2/query',
+	}
 };
 
 sub date_to_name {
@@ -128,24 +133,26 @@ sub create {
 		push @res, $table->create();
 	}
 
-	return $self->create_index(@res);
+	return $self->create_index_file(@res);
 }
 
-sub create_index {
+sub create_index_file {
 	my ($self, @res) = @_;
-	INFO 'Responses: ', Dumper(\@res);
 
-	my $jsonRes = $self->{jsoner}->encode( {
+	my $json = $self->{jsoner}->encode( {
 		mergedTableIds => \@res 
 	});
 
+	# SELECT $CONFIG->{geosku_table_name}.sku, $CONFIG->{index_table_name}.url
+	# FROM $CONFIG->{geosku_table_name} JOIN $CONFIG->{index_table_name}
+
 	INFO "Create $self->{output_dir}/index.js";
 	open my $FH, ">:encoding(utf8)", "$self->{output_dir}/index.js" or die "$! - $self->{output_dir}/index.js";
-	print $FH $jsonRes;
+	print $FH $json;
 	close $FH;
 
 	INFO 'Done, leave Izel::create';
-	return $jsonRes;
+	return $json;
 }
 
 sub load_geo_sku_from_csv {
@@ -185,7 +192,7 @@ sub get_dir_from_path {
 }	
 
 sub get_dbh {
-	my $self = shift;
+	my ($self, $wipe) = @_;
 	$self->{dbh} = DBI->connect("dbi:SQLite:dbname=$CONFIG->{db_path}","","");
 
 	# Check for our table:
@@ -193,12 +200,24 @@ sub get_dbh {
 	my @tables = $self->{dbh}->selectall_array($sth);
 
 	# If the scheme does not exist, create it:
-	if (not grep { $_->[2] eq $CONFIG->{geosku_table_name}  } @tables ) {
-		$sth = $self->{dbh}->prepare("CREATE TABLE $CONFIG->{geosku_table_name} (
-			geo_id2	BLOB,
-			sku		VARCHAR(10)
-		)");
-		$sth->execute or die;
+	# warn Dumper grep { warn 'xxxxxx',$_->[2];$_->[2] eq $CONFIG->{geosku_table_name}  } @tables;
+	if ($wipe or not grep { $_->[2] eq $CONFIG->{geosku_table_name}  } @tables ) {
+		foreach my $statement (
+			"DROP TABLE IF EXISTS $CONFIG->{index_table_name}",
+			"CREATE TABLE $CONFIG->{index_table_name} (
+				id INTEGER AUTO_INCREMENT PRIMARY KEY,
+				url VARCHAR(255)
+			)",
+			"DROP TABLE IF EXISTS $CONFIG->{geosku_table_name}",
+			"CREATE TABLE $CONFIG->{geosku_table_name} (
+				geo_id2			BLOB,
+				sku				VARCHAR(10),
+				merged_table_id INTEGER,
+				FOREIGN KEY(merged_table_id) REFERENCES $CONFIG->{index_table_name}(merged_table_id)
+			)"
+		){
+			$self->{dbh}->do($statement);
+		}
 		$self->{created_db} = 1;
 	} 
 	
@@ -232,7 +251,7 @@ sub compute_fusion_tables {
 	);
 
 	my $table_args = {
-		map { $_ => $self->{$_} } qw/ auth_token auth_string output_dir jsoner dbh us_counties_table_id /
+		map { $_ => $self->{$_} } qw/ auth_token auth_string output_dir jsoner dbh us_counties_table_id ua/
 	};
 
 	my $tables = [
@@ -275,10 +294,11 @@ sub new {
 	my $inv  = shift;
 	my $args = ref($_[0])? shift : {@_};
 	$TABLES_CREATED ++;
+	$args->{ua} ||= LWP::UserAgent->new;
+	
 	my $self = {
 		%$args,
 		jsoner	=> JSON::Any->new,
-		ua		=> LWP::UserAgent->new,
 		sth		=> {},
 		count => 0, 
 		skus => [],
@@ -297,19 +317,40 @@ sub new {
 }
 
 sub create {
-	TRACE 'Enter';
+	TRACE 'Enter Izel::Table::Create';
 	my $self = shift;
 	$self->_create_table_on_google();
 	$self->_populate_table_on_google();
 	
-	my $res = $self->_create_merge();
+	$self->_create_merge();
 
-	# if ($res->{mergedtableid}) {
-	# 	my $delete_res = $self->delete();
-	# }
+	$self->_update_skus_merged_table_id();
 
 	TRACE 'Leave';
-	return $res;
+}
+
+sub _update_skus_merged_table_id {
+	my $self = shift;
+	$self->require_defined_fields('skus', 'merged_table_google_id');
+
+	$self->{sth}->{create_merged_table_id} ||= $self->{dbh}->prepare_cached("
+		INSERT INTO $CONFIG->{index_table_name} (url) VALUES (?)
+	");
+	$self->{sth}->{create_merged_table_id}->execute($self->{merged_table_google_id});
+	$self->{merged_table_id} = $self->{dbh}->last_insert_id( undef, undef, $CONFIG->{index_table_name}, undef );
+
+	$self->{sth}->{update_skus_merged_table_id} ||= $self->{dbh}->prepare_cached("
+		UPDATE $CONFIG->{geosku_table_name} 
+		SET merged_table_id = ?
+		WHERE sku = ?
+	");
+	
+	foreach my $sku (@{ $self->{skus}}) {
+		$self->{sth}->{update_skus_merged_table_id}->execute(
+			$self->{merged_table_id},
+			$sku
+		);
+	}
 }
 
 sub add_count {
@@ -343,13 +384,12 @@ sub _create_table_on_google {
 		]
 	};
 
-    my $url = 'https://www.googleapis.com/fusiontables/v2/tables';
-
-	INFO "Posting '$self->{name}' to $url";
-	my $res = $self->_post_blob( $url, $table );
+	DEBUG "Posting '$self->{name}' to ", $CONFIG->{endpoints}->{_create_table_on_google};
+	my $res = $self->_post_blob( $CONFIG->{endpoints}->{_create_table_on_google}, $table );
+	LOGCONFESS 'No content.tableId from Google?' if not $res->{content}->{tableId};
 	$self->{table_id} = $res->{tableId} = $res->{content}->{tableId};
 	INFO "Created table ID ", $self->{table_id};
-	INFO Dumper $res;
+	TRACE Dumper $res;
 	return $res;
 }
 
@@ -445,7 +485,6 @@ sub get_geoid2s_for_sku {
 sub _populate_table_on_google {
 	TRACE 'Enter';
 	my $self = shift;
-	my $url = 'https://www.googleapis.com/fusiontables/v2/query';
 	$self->require_defined_fields(qw/ table_id count skus /);
 
 	my $statements = 0;	# Up to 500 INSERTs 
@@ -466,17 +505,16 @@ sub _populate_table_on_google {
 	}
 	TRACE 'Call final insert';
 	push @res, $self->_execute_gsql($gsql);
-	TRACE 'Inserted all rows';
-	INFO Dumper \@res;
+	DEBUG 'Inserted all rows';
+	TRACE Dumper \@res;
 	return @res;
 }
 
 
 sub _execute_gsql {
 	my ($self, @gsql) = @_;
-	my $url = 'https://www.googleapis.com/fusiontables/v2/query';
-	TRACE "Posting form gSQL to $url";
-	my $res = $self->_post_blob( $url, \@gsql);
+	TRACE "Posting form gSQL to ", $CONFIG->{endpoints}->{gsql};
+	my $res = $self->_post_blob( $CONFIG->{endpoints}->{gsql}, \@gsql);
 	return $res;
 }
 
@@ -493,9 +531,9 @@ sub _create_merge {
 	TRACE $gsql;
 	my $res = $self->_execute_gsql($gsql);
 	if ($res->{content} and $res->{content}->{rows}) {
-		return $res->{content}->{rows}->[0]->[0];
+		$self->{merged_table_google_id} = $res->{content}->{rows}->[0]->[0];
 	} else {
-		return $res;
+		LOGCONFESS 'Unexpected response to gsql:', $gsql, "\nResponse:", Dumper $res;
 	}
 }
 
