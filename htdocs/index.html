@@ -131,6 +131,10 @@
             console.log('page 6: ', window.wizard.state.indexJsDir);
         }
 
+        var pageReviewIndexes = function () {
+            console.log('hi');
+        }
+
         var displayIndexJsDir = async function () {
             var response = await window.fetch(
                 window.wizard.state.indexJsDir + '/index.js'
@@ -173,17 +177,20 @@
          */
         Wizard.prototype.gotoPage = function (pageName) {
             var pageNumber = Number(pageName) ? pageName : this.findPageNumber(pageName);
-            console.log('Wizard gotoPage, from ', this.page, ' to page ', pageName, ' which I thin is ', pageNumber);
+            console.log('Wizard gotoPage, from ', this.page, ' to page ', pageName, ' which I think is ', pageNumber);
             this.nextPage(pageNumber);
         }
 
         Wizard.prototype.findPageNumber = function (pageName) {
             var rv;
             try {
-                rv = document.querySelector('script[type="text/mustache"][data-page-name="' + pageName + '"]').id.match(/^page-(\d+)$/)[1]
+                rv = Number( document.querySelector('script[type="text/mustache"][data-page-name="' + pageName + '"]').id.match(/^page-(\d+)$/)[1] );
+                this.state.pageName = pageName;
+                console.log('Found page, set pageName to ', this.state.pageName = pageName);
             } catch (e) {
                 console.log('No such page as ', pageName);
                 rv = null;
+                this.state.pageName = null;
             }
             console.log('FindPageNumber found for page %s page number %d', pageName, rv);
             return rv;
@@ -204,7 +211,9 @@
          * @return void
          */
         Wizard.prototype.nextPage = function (pageNumber) {
+            console.log('Enter Wizard.nextPage');
             if (!pageNumber) {
+                this.state.pageName = null; // ?? Check
                 console.log('no pageNumber arg');
                 var el = document.getElementById('page-' + this.page);
                 if (el && el.dataset && el.dataset.nextPage) {
@@ -256,12 +265,26 @@
             window.location.hash = this.page;
             window.history.pushState( this.state, 'Page '+this.page, window.location.toString() );
 
-            var fn = 'page' + this.page;
-            if (typeof window[fn] === 'function') {
-                window[fn](arguments);
+            var fns = ['page' + this.page];
+            if (this.state.pageName) {
+                fns.push( this._antsToCamelCase('page-' + this.state.pageName) );
             }
+            fns.forEach( (fn) => {
+                console.log('Try to find function ', fn);
+                if (typeof window[fn] === 'function') {
+                    console.log('Found function ', fn);
+                    window[fn](arguments);
+                }
+            });
             console.log('Page = ', this.page);
         }
+
+        Wizard.prototype._antsToCamelCase = function (str) {
+            return str.replace(/-(\w)/g, (_, initial) => {
+                return initial.toUpperCase();
+            });
+        }
+
     </script>
 
     <script type='text/mustache' id='page-100' data-page-name='manual-auth'>
@@ -287,7 +310,7 @@
             <legend>Upload SKU Geography</legend>
             <div id='enterSkusToProcess'>
                 <p><label for='skusToProess'>Please enter a list of USDA symbols/SKUs to proceess. Separate mulitple values with spaces and/or commas.</p>
-                <p><textarea id='skusToProcess' name='skusToProcess'></textarea>
+                <ul><textarea id='skusToProcess' name='skusToProcess'></textarea>
             </div>
             <div id='selectCsv'>
                 <p><label for='skusCsv'>To create a new Fusion Table, select a SKU CSV file from your local machine:</label></p>
@@ -325,9 +348,19 @@
     </script>
 
     <script type='text/mustache' id='page-10' data-page-name='review-indexes'>
-        <p>
-            JSON index: <a href='{{wizard.state.indexJsDir}}'>{{wizard.state.indexJsDir}}</a>
-        </p>
+        <p> Please select an index. </p>
+        <ul>
+            {{#wizard.state.indexes}}
+                <li>{{.}}</li>
+            {{/wizard.state.indexes}}
+        </ul>
+    </script>
+
+    <script type='text/mustache' id='page-11' data-page-name='no-indexes'>
+        <p>There are no indexes. Please upload some SKU/geography.</p>
+    </script>
+
+    <script type='text/mustache' id='page-20' data-page-name='specific-index'>
         {{#wizard.state.indexJs.mergedTableIds}}
             <h3><a href="https://fusiontables.google.com/DataSource?docid={{.}}#map:id=3>Map {{}}</a>
         {{/wizard.state.indexJs.mergedTableIds}}
