@@ -177,6 +177,8 @@ sub create {
 		mkdir $self->{output_dir} or die "$! - $self->{output_dir}";
 	}
 
+	$self->create_htaccess;
+
 	my $tables = $self->compute_fusion_tables;
 
 	my @merged_table_google_ids;
@@ -186,6 +188,14 @@ sub create {
 	}
 
 	return $self->create_index_file(@merged_table_google_ids);
+}
+
+sub create_htaccess {
+	my $self = shift;
+	my $path = $self->{output_dir} . '/.htaccess';
+	open my $out, '>'.$path or die "$! - $path";
+	print $out "Options +Indexes\n";
+	close $out;
 }
 
 
