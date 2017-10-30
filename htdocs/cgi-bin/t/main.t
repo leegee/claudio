@@ -23,13 +23,15 @@ my $izel = Izel->new(
         network_fallback => 0
     ),
     output_dir => File::Temp::tempdir( CLEANUP => 1 ),
-    auth_string => 'mock',
+    auth_string => 'mock_auth_string=keyandaccess_token=mock_access_token',
 );
 isa_ok($izel, 'Izel');
 
+my $MOCK_TABLE_ID = 999;
+
 my $MOCK_RES_CONTENT = {
-    _create_table_on_google => {tableId => 'MOCK_TABLE_ID'},
-    gsql => {rows => [[999]]}
+    _create_table_on_google => {tableId => $MOCK_TABLE_ID},
+    gsql => {rows => [[$MOCK_TABLE_ID]]}
 };
 
 $izel->{ua}->map_response(
@@ -99,7 +101,7 @@ subtest 'compute_fusion_tables' => sub {
         @_ = test_table_obj(@_);
         is_deeply $_[0]->{skus}, ['ARTHR', 'SCSC'], 'skus';
         is $_[0]->{count}, 18, 'count';
-        is $_[0]->{name}, 'Table #0', 'name';
+        is $_[0]->{name}, undef, 'name';
         is $_[0]->{index_number}, 0, 'index_number';
     };
 
@@ -108,12 +110,12 @@ subtest 'compute_fusion_tables' => sub {
         @_ = test_table_obj(@_);
         is_deeply $_[0]->{skus}, ['ARTHR'], 'skus';
         is $_[0]->{count}, 14, 'count';
-        is $_[0]->{name}, 'Table #0', 'name';
+        is $_[0]->{name}, undef, 'name';
         is $_[0]->{index_number}, 0, 'index_number';
 
         is_deeply $_[1]->{skus}, ['SCSC'], 'skus';
         is $_[1]->{count}, 4, 'count';
-        is $_[1]->{name}, 'Table #1', 'name';
+        is $_[1]->{name}, undef, 'name';
         is $_[1]->{index_number}, 1, 'index_number';
     };
 };
@@ -133,23 +135,30 @@ subtest 'create_fusion_tables' => sub {
     my $tables = $izel->compute_fusion_tables;
     isa_ok $tables, 'ARRAY', 'rv';
 
-	my @res;
     subtest 'Table::create' => sub {
         foreach my $table (@$tables) {
             isa_ok $table, 'Izel::Table';
-            push @res, $table->create();
+            $table->create();
         }
     };
 
     subtest 'json index' => sub {
-        my $json = JSON::Any->jsonToObj( $izel->_compose_index_file(@res) );
+    	my @merged_table_google_ids;
+        foreach my $table (@$tables) {
+            push @merged_table_google_ids, $table->{merged_table_google_id};
+        }
+
+        my $json = JSON::Any->jsonToObj( $izel->_compose_index_file(@merged_table_google_ids) );
         is_deeply $json, {
-            skus2tableIds => {
-                ARTHR => '999',
-                SCSC => '999'
+            tableInternalId2googleTableId => {
+                '1' => $MOCK_TABLE_ID,
+                '2' => $MOCK_TABLE_ID
             },
-            mergedTableIds => [ 1 ]
-        }, 'json index';
+            sku2tableInternalId => {
+                'SCSC' => 2,
+                'ARTHR' => 2
+            }
+        }, 'json index' or LOGDIE Dumper $json;
 
     };
 
@@ -157,8 +166,5 @@ subtest 'create_fusion_tables' => sub {
 
 
 done_testing();
-
-
-
 
 
