@@ -72,8 +72,8 @@
             return (await response.json()).items;
         }
 
-        var page2 = async function () {
-            console.log('Enter page2');
+        var page2AfterRender = async function () {
+            console.log('Enter page2-------------------------------');
             // window.wizard.fusionTableDetails = await asyncListTables();
             //     window.wizard.nextPage();
             // }
@@ -91,7 +91,8 @@
             // });
         }
 
-        var page3 = async function () {
+        var uploadAfterRender = async function () {
+            console.log('Enter uploadAfterRender');
             document.getElementById('cancel-skus').addEventListener('click', document.location.reload, false);
             document.getElementById('upload-skus').addEventListener('click', () => { window.wizard.nextPage() }, false);
             return Promise.resolve();
@@ -147,13 +148,15 @@
         }
 
         // Relies upon server auto-indexing (NB .htaccess created in Izel.pm)
-        var pageReviewIndexesAfter = async function () {
+        var pageReviewIndexesBeforeRender = async function () {
+            console.log('pageReviewIndexesAfter');
             var response = await window.fetch(
                 this.state.indexBaseDir
             );
             var text = await response.text();
             wizard.state.indexes = _linksFromText(text);
-            console.log(wizard.state.indexes);
+            console.log('wizard.state.indexes = ', wizard.state.indexes);
+            debugger;
             // this.render();
             // window.wizard.gotoPage('review-indexes');
         }
@@ -195,31 +198,35 @@
          * ## Code For Pages
          *
          * Before a page is rendered, the Wizard will try to call a function with a camel-cased version
-         * of the ant-cased page name.
+         * of the ant-cased page name, prefixed with the word 'page'.
          *
          * @example
          *  <script type=<script type='text/mustache' data-page-name='manual-auth'> ...
-         *  function manualAuth () { ...
+         *  function pageManualAuth () { ...
          *
          * After a page is displayed, the Wizard will try to call a function with the same name, and the
-         * suffix 'After`:
+         * suffix 'AfterRender`:
          *
-         *  function manualAuthAfter () { ...
+         *  function pageManualAuthAfterRender () { ...
          *
-         * Note that a suffix `Before` may be added to the function called before the page is rendered.
+         * Note that a suffix `BeforeRender` may be added to the function called before the page is rendered.
+         *
+         *  function pageManualAuthBeforeRender () { ...
          *
          * All three functions are called in the context of the Wizard.
+         *
+         * Yeah, @decorators would be nice without trainspoiling.
          *
          */
         var Wizard = function (state) {
             this.state = {
-                pageIds: []
+                pageIds: [],
+                pageNumber: 0
             }; // window.history.popstate();?
             Object.keys(state).forEach((key) => {
                 this.state[key] = state[key];
             });
             this.pageEl = null;
-            this.page = 0;
             this.el = {
                 main: document.getElementById('main'),
                 pageNumber: document.getElementById('pageNumber')
@@ -247,7 +254,7 @@
          */
         Wizard.prototype.gotoPage = function (pageName) {
             var pageNumber = Number(pageName) ? pageName : this.findPageNumber(pageName);
-            console.log('Wizard gotoPage, from ', this.page, ' to page ', pageName, ' which I think is ', pageNumber);
+            console.log('Wizard gotoPage, from ', this.state.pageNumber, ' to page ', pageName, ' which I think is ', pageNumber);
             this.nextPage(pageNumber);
         }
 
@@ -285,13 +292,13 @@
             if (!pageNumber) {
                 this.state.pageName = null; // ?? Check
                 console.log('no pageNumber arg');
-                var el = document.getElementById('page-' + this.page);
+                var el = document.getElementById('page-' + this.state.pageNumber);
                 if (el && el.dataset && el.dataset.nextPage) {
                     pageNumber = this.findPageNumber(el.dataset.nextPage);
                     console.log('set pageNumber from nextPage; is now ', pageNumber);
                 } else {
-                    console.log('no existing page/with nextPage, ', this.page);
-                    pageNumber = Number(this.page) + 1;
+                    console.log('no existing page/with nextPage, ', this.state.pageNumber);
+                    pageNumber = Number(this.state.pageNumber) + 1;
                     console.log('inc pageNumber to ', pageNumber);
                 }
 
@@ -299,6 +306,9 @@
             }
 
             this.pageEl = document.getElementById('page-' + pageNumber);
+
+            // No exact page number - find the next-highest number,
+            // remembering pages may have been added since we last looked at the DOM.
             if (! this.pageEl) {
                 for (var i = 0; i < this.state.pageIds.length; i++) {
                     if (this.state.pageIds[i] > pageNumber) {
@@ -313,35 +323,33 @@
                 }
             }
 
-            console.log('Wizard.nextPage from page', this.page, 'to page number ', pageNumber);
-            this.page = pageNumber;
+            console.log('Wizard.nextPage from page # %d to # %d, named %s', this.state.pageNumber, pageNumber, this.state.pageName);
+            this.state.pageNumber = pageNumber;
 
             var fnNames = [
-                    'page' + this.page
-                ],
-                fns = []
-            ;
+                'page' + this.state.pageNumber,
+                'page' + this.state.pageNumber + '-before-render'
+            ];
             if (this.state.pageName) {
-                fnNames.push( this._antsToCamelCase(this.state.pageName));
-                fnNames.push( this._antsToCamelCase(this.state.pageName + '-before'));
+                fnNames.push( this._antsToCamelCase('page-' + this.state.pageName));
+                fnNames.push( this._antsToCamelCase('page-' + this.state.pageName + '-before-render'));
             }
-            for (fnName of fnNames){
-                if (typeof fnName === 'function') {
-                    fns.push( fnName );
-                }
-            }
+
+            await this._execute(fnNames);
 
             this.render();
-            await this._execute(fns);
 
             if (this.state.pageName) {
-                await this._execute( this._antsToCamelCase(this.state.pageName + '-after') );
+                await this._execute([
+                    this._antsToCamelCase('page-' + this.state.pageNumber + '-after-render'),
+                    this._antsToCamelCase('page-' + this.state.pageName + '-after-render')
+                ]);
             }
 
-            window.location.hash = this.page;
-            window.history.pushState( this.state, 'Page '+this.page, window.location.toString() );
+            window.location.hash = this.state.pageNumber;
+            window.history.pushState( this.state, 'Page '+this.state.pageNumber, window.location.toString() );
 
-            console.log('Page = ', this.page);
+            console.log('Page = ', this.state.pageNumber);
         }
 
         Wizard.prototype._execute = async function (fns) {
@@ -372,7 +380,7 @@
                     this.pageEl.innerHTML.toString(),
                     { wizard: this }
                 );
-                this.el.pageNumber.innerText = this.page;
+                this.el.pageNumber.innerText = this.state.pageNumber;
                 var links = document.querySelectorAll('[data-goto-page]');
                 for (var el of links) {
                     el.onclick = (e) => {
@@ -454,6 +462,7 @@
 
     <script type='text/mustache' id='page-10' data-page-name='review-indexes'>
         <p> Please select an index. </p>
+        {{window.wizard.state.indexes}}
         <ul>
             {{#wizard.state.indexes}}
                 <li>{{.}}</li>
