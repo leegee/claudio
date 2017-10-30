@@ -179,37 +179,48 @@ sub create {
 
 	my $tables = $self->compute_fusion_tables;
 
-	my @res;
+	my @merged_table_google_ids;
 	foreach my $table (@$tables) {
-		push @res, $table->create();
+		$table->create();
+		push @merged_table_google_ids, $table->{merged_table_google_id};
 	}
 
-	return $self->create_index_file(@res);
+	return $self->create_index_file(@merged_table_google_ids);
+}
+
+
+sub create_index_file {
+	my ($self, @merged_table_google_ids) = @_;
+	my $json = $self->_compose_index_file(@merged_table_google_ids);
+	return $self->_write_index_file($json);
 }
 
 
 sub _compose_index_file {
-	my ($self, @res) = @_;
+	my ($self, @merged_table_google_ids) = @_;
     my @skus2table_ids = $self->{dbh}->selectall_array("
-        SELECT DISTINCT $CONFIG->{geosku_table_name}.sku AS sku, $CONFIG->{index_table_name}.url AS table_id
-        FROM $CONFIG->{geosku_table_name}
-        JOIN $CONFIG->{index_table_name}
+        SELECT DISTINCT
+		      $CONFIG->{geosku_table_name}.sku AS sku,
+		      $CONFIG->{index_table_name}.url AS googleTableId,
+		      $CONFIG->{index_table_name}.id AS internalTableId
+		 FROM $CONFIG->{geosku_table_name}
+		 JOIN $CONFIG->{index_table_name}
+		   ON $CONFIG->{geosku_table_name}.merged_table_id = $CONFIG->{index_table_name}.id
+    ");
+
+	my @tableInternalId2googleTableId = $self->{dbh}->selectall_array("
+        SELECT id, url FROM $CONFIG->{index_table_name}
+		WHERE url IN ("
+		. join(",", map {$self->{dbh}->quote($_)} @merged_table_google_ids)
+		. ")
     ");
 
 	my $json = $self->{jsoner}->encode({
-		mergedTableIds => \@res,
-		skus2tableIds  =>  {
-			map { $_->[0] => $_->[1] } @skus2table_ids
-		}
+		sku2tableInternalId => { map { $_->[0] => $_->[2] } @skus2table_ids },
+		tableInternalId2googleTableId  => { map { $_->[0] => $_->[1] } @tableInternalId2googleTableId },
 	});
 
 	return $json;
-}
-
-sub create_index_file {
-	my ($self, @res) = @_;
-	my $json = $self->_compose_index_file(@res);
-	return $self->_write_index_file($json);
 }
 
 sub _write_index_file {
@@ -272,7 +283,7 @@ sub get_dbh {
 		foreach my $statement (
 			"DROP TABLE IF EXISTS $CONFIG->{index_table_name}",
 			"CREATE TABLE $CONFIG->{index_table_name} (
-				id INTEGER AUTO_INCREMENT PRIMARY KEY,
+				id INTEGER PRIMARY KEY,
 				url VARCHAR(255)
 			)",
 			"DROP TABLE IF EXISTS $CONFIG->{geosku_table_name}",
