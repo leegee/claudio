@@ -59,7 +59,7 @@
         };
 
         const authString = function () {
-            return 'key=' + Config.apikey + '&access_token=' + window.wizard.access_token;
+            return 'key=' + Config.apikey + '&access_token=' + window.wizard.state.access_token;
         };
 
         var asyncListTables = async function () {
@@ -315,7 +315,7 @@
             <dt>Size<dt><dd>{{wizard.state.file.size}}</dd>
             <dt>Last Modified<dt><dd>{{wizard.state.file.lastModifiedDate}}</dd>
         </dl>
-        <button id="upload-skus">Add this file's skus to the map</button>
+        <button id="upload-skus">Process this SKU/geography file</button>
         <button id="cancel-skus">Cancel</button>
     </script>
 

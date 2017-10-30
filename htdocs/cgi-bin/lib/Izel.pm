@@ -106,6 +106,9 @@ sub new {
 	if ($self->{auth_string} and not $self->{auth_token}) {
 		($self->{auth_token}) = $self->{auth_string} =~ /access_token=(.+)$/;
 		INFO 'SET AUTH TOKEN TO ', $self->{auth_token};
+		if (not defined $self->{auth_token}) {
+			LOGCONFESS 'No auth token found in auth_string, ' . $self->{auth_string};
+		}
 	}
 
 	return bless $self, ref($inv) ? ref($inv) : $inv;
@@ -463,7 +466,7 @@ sub _create_table_on_google {
 
 	DEBUG "Posting '$self->{name}' to ", $CONFIG->{endpoints}->{_create_table_on_google};
 	my $res = $self->_post_blob( $CONFIG->{endpoints}->{_create_table_on_google}, $table );
-	LOGCONFESS 'No content.tableId from Google?' if not $res->{content}->{tableId};
+	LOGCONFESS 'No content.tableId from Google? Res='.(Dumper $res) if not $res->{content}->{tableId};
 	$self->{table_id} = $res->{tableId} = $res->{content}->{tableId};
 	INFO "Created table ID ", $self->{table_id};
 	TRACE Dumper $res;
