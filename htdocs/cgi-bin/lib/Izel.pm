@@ -371,13 +371,24 @@ sub new {
 
 	$self->{ua}->timeout(30);
 	$self->{ua}->env_proxy;
-	$self->{name} = $args->{name} || 'Table #' . $self->{index_number};
 
 	$self = bless $self, ref($inv) ? ref($inv) : $inv;
 
 	$self->require_defined_fields('output_dir');
 
 	return $self;
+}
+
+sub first_and_last_sku {
+	my $self = shift;
+	@{ $self->{skus} } = sort @{$self->{skus}};
+	return $self->{skus}->[0], $self->{skus}->[ $#{$self->{skus}} ];
+}
+
+sub set_name_from_skus {
+	my $self = shift;
+	$self->{name} = 'SKU/Geo Table #' . $self->{index_number}
+		. ' (' . join(' - ', $self->first_and_last_sku()) .')';
 }
 
 sub create {
@@ -426,6 +437,8 @@ sub add_count {
 sub _create_table_on_google {
     TRACE "Enter";
 	my $self = shift;
+
+	$self->set_name_from_skus;
 	$self->require_defined_fields(qw/ index_number name /);
 
 	my $table = {
