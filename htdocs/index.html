@@ -147,14 +147,14 @@
         }
 
         // Relies upon server auto-indexing (NB .htaccess created in Izel.pm)
-        var pageReviewIndexes = async function () {
+        var pageReviewIndexesAfter = async function () {
             var response = await window.fetch(
                 this.state.indexBaseDir
             );
             var text = await response.text();
             wizard.state.indexes = _linksFromText(text);
             console.log(wizard.state.indexes);
-            this.render();
+            // this.render();
             // window.wizard.gotoPage('review-indexes');
         }
 
@@ -168,6 +168,49 @@
             return rv;
         }
 
+        /**
+         * Pages are `script` elements of `type` `text/mustache`,
+         *  with an id attribute beginning `page-` and ending with a number.
+         *
+         * @example
+         *  <script type=<script type='text/mustache' id='page-100' data-page-name='manual-auth'> ...
+         *
+         * Pages are displayed sequentially via `Wizard.nextPage`, though the numbers need not be consecutive.
+         *
+         * Pages may be referred to by an 'ant-case' name defined in the template element's `data-page-name` attribute:
+         *
+         * @example
+         *  <script type=<script type='text/mustache' data-page-name='manual-auth'> ...
+         *  <script type=<script type='text/mustache' id='page-100' data-page-name='manual-auth'> ...
+         *
+         * ## Data for Page Templates
+         *
+         * The Wizard supplies itself as `wizard`.
+         *
+         * ## Linking Within Pages
+         *
+         * Before templates are displayed, hyperlinks are added to any element that has an attribute
+         * `data-goto-page`: the attribute's value can be a page number or name.
+         *
+         * ## Code For Pages
+         *
+         * Before a page is rendered, the Wizard will try to call a function with a camel-cased version
+         * of the ant-cased page name.
+         *
+         * @example
+         *  <script type=<script type='text/mustache' data-page-name='manual-auth'> ...
+         *  function manualAuth () { ...
+         *
+         * After a page is displayed, the Wizard will try to call a function with the same name, and the
+         * suffix 'After`:
+         *
+         *  function manualAuthAfter () { ...
+         *
+         * Note that a suffix `Before` may be added to the function called before the page is rendered.
+         *
+         * All three functions are called in the context of the Wizard.
+         *
+         */
         var Wizard = function (state) {
             this.state = {
                 pageIds: []
@@ -273,17 +316,42 @@
             console.log('Wizard.nextPage from page', this.page, 'to page number ', pageNumber);
             this.page = pageNumber;
 
-            this.render();
-
-            var fns = ['page' + this.page];
+            var fnNames = [
+                    'page' + this.page
+                ],
+                fns = []
+            ;
             if (this.state.pageName) {
-                fns.push( this._antsToCamelCase('page-' + this.state.pageName) );
+                fnNames.push( this._antsToCamelCase(this.state.pageName));
+                fnNames.push( this._antsToCamelCase(this.state.pageName + '-before'));
+            }
+            for (fnName of fnNames){
+                if (typeof fnName === 'function') {
+                    fns.push( fnName );
+                }
             }
 
+            this.render();
+            await this._execute(fns);
+
+            if (this.state.pageName) {
+                await this._execute( this._antsToCamelCase(this.state.pageName + '-after') );
+            }
+
+            window.location.hash = this.page;
+            window.history.pushState( this.state, 'Page '+this.page, window.location.toString() );
+
+            console.log('Page = ', this.page);
+        }
+
+        Wizard.prototype._execute = async function (fns) {
+            console.log('Wizard._execute', fns);
+            if (! fns) return;
+            if (typeof fns === 'string') fns = [fns];
             for (fn of fns) {
+                console.log('Try to execute ', fn);
                 if (typeof window[fn] === 'function') {
                     var rv =window[fn].call(this, arguments);
-                    // var rv = window[fn](arguments);
                     if (typeof rv === 'object' && rv.then && typeof rv.then === 'function') {
                         console.log('Await');
                         try {
@@ -295,18 +363,14 @@
                     }
                 }
             }
-
-            window.location.hash = this.page;
-            window.history.pushState( this.state, 'Page '+this.page, window.location.toString() );
-
-            console.log('Page = ', this.page);
-        }
+        };
 
         Wizard.prototype.render = function () {
+            console.log('Enter render');
             try {
                 this.el.main.innerHTML = Mustache.render(
                     this.pageEl.innerHTML.toString(),
-                    { Config: Config, wizard: this }
+                    { wizard: this }
                 );
                 this.el.pageNumber.innerText = this.page;
                 var links = document.querySelectorAll('[data-goto-page]');
