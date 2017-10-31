@@ -26,7 +26,7 @@ Log::Log4perl->init(\'
     log4perl.appender.IzelApp.layout.ConversionPattern = %d %m %n
 ');
 
-$CGI::POST_MAX = 1024 * 10000;
+$CGI::POST_MAX = 1024 * 100000000; # 208795632
 $CGI::DISABLE_UPLOADS = 0;
 
 LOGDIE 'No $ENV{DOCUMENT_ROOT} !!!' if not $ENV{DOCUMENT_ROOT};
@@ -36,7 +36,7 @@ my @missing = grep {! $cgi->param($_) } qw/ skus-file index_js_dir /;
 my $IN  = $cgi->upload('skus-file');
 push(@missing, '(skus-file is not a filehandle)') if not defined $IN;
 if (@missing) {
-    return 'Missing params: ', join ', ', @missing;
+    LOGDIE 'Missing params: ', join ', ', @missing;
 }
 
 Izel::upload_skus(

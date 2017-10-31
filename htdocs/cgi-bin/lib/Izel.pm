@@ -20,6 +20,7 @@ sub require_defined_fields {
 package Izel;
 use base 'IzelBase';
 use Data::Dumper;
+use File::Path;
 use Encode;
 use Log::Log4perl ':easy';
 require  DBI;
@@ -137,10 +138,6 @@ UNUSED - A CSV of C<SKU,Latin> Name.
 
 A bar-delimited list of SKU|FIPS, one per line: C<CSC|53007>.
 
-=item C<number_of_output_files>.
-
-Defaults to 5.
-
 =item C<output_dir>
 
 Directory.
@@ -152,7 +149,6 @@ sub create {
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
 
-    $args->{number_of_output_files} ||= 5;
 	if ($args->{include_only_skus}){
 		$args->{include_only_skus} = { map { $_ => 1 } @{$args->{include_only_skus}} }
 	}
@@ -174,7 +170,7 @@ sub create {
 	$self->{output_dir} = $args->{output_dir};
 
 	if (!-d $self->{output_dir}) {
-		mkdir $self->{output_dir} or die "$! - $self->{output_dir}";
+		File::Path::make_path( $self->{output_dir} ) or die "$! - $self->{output_dir}";
 		INFO 'Created output_dir, ' . $self->{output_dir};
 	}
 
@@ -197,6 +193,7 @@ sub create_htaccess {
 	open my $out, '>'.$path or die "$! - $path";
 	print $out "Options +Indexes\n";
 	close $out;
+	TRACE 'Created ', $path;
 }
 
 
@@ -245,13 +242,22 @@ sub _write_index_file {
 }
 
 sub load_geo_sku_from_csv {
+	TRACE 'Load GEO/SKU from CSV';
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
+	if ($args->{include_only_skus} and ref $args->{include_only_skus} eq 'HASH'
+		and (not scalar keys %{ $args->{include_only_skus} })
+	) {
+		delete $args->{include_only_skus};
+	}
 	$args->{separator} ||= ',';
 	my $count = 0;
 
 	open my $IN, "<:encoding(utf8)", $args->{path}
 		or LOGDIE "$! - $args->{path}";
+
+	DEBUG 'Reading uploaded CSV, ', $args->{path};
+
 
 	my $csv_input = Text::CSV_XS->new({
 		sep_char 	=> $args->{separator},
@@ -259,17 +265,34 @@ sub load_geo_sku_from_csv {
 		auto_diag 	=> 1
 	});
 
+	my $mode;
+
 	while (my $row = $csv_input->getline($IN)) {
+		if (! defined $mode && $row->[0] eq 'SKU') {
+			# "SKU","REGION","FIPS","STATE_NAME","COUNTY_NAME"
+			$mode = 1;
+			next;
+		}
 		my $sku  = uc $row->[0];
-		my $fips = $row->[1];
+		my $fips;
+		if ($mode) {
+			$fips = $row->[2];
+			$fips =~ s/^US//;
+		} else {
+			$fips = $row->[1];
+		}
+		# TRACE  "$fips -> $sku :: ", join",",@$row;
 		LOGDIE 'FIPS should be numeric, got a row [', join(', ', @$row), ']' if not $fips =~ /^\d+$/;
 		my $geo_id2 = $fips + 0;
 		if (not($args->{include_only_skus}) or exists $args->{include_only_skus}->{$sku}){
 			$self->insert_geosku( $geo_id2, $sku );
 			$count ++;
 		}
+
+		INFO "Processed $count rows from the uploaded CSV file." if $count % 100 == 0;
 	}
 
+	DEBUG 'Done reading CSV.';
 	close $IN;
 	return $count;
 }
@@ -461,7 +484,7 @@ sub add_count {
 }
 
 sub _create_table_on_google {
-    TRACE "Enter";
+    TRACE "Enter _create_table_on_google";
 	my $self = shift;
 
 	$self->set_name_from_skus('SKU/Geo');
