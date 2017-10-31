@@ -131,10 +131,10 @@
             request.send(data);
         }
 
-        var pageReviewSpecificIndexAfterRender = async function (e) {
+        var pageReviewSpecificIndexAfterRender = async function ([e]) {
             var jobName = e.target.innerText;
             var response = await window.fetch(
-                window.wizard.state.indexJsDir + jobName + '/index.js'
+                window.wizard.state.indexBaseDir + '/' + jobName + '/index.js'
             );
             window.wizard.state.indexJs = await response.json();
             // Map the index to something the page can display:
