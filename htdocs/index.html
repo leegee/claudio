@@ -208,15 +208,19 @@
          *
          */
         var Wizard = function (state) {
-            this.state = {
-                pageName: ''
-            }; // window.history.popstate();?
+            this.state = {};
+                // pageName: null,
+                // lastPageName: null
+            // window.history.popstate();?
             Object.keys(state).forEach((key) => {
                 this.state[key] = state[key];
             });
             this.pageEl = null;
             this.el = {
                 main: document.getElementById('main'),
+                ctrlNext: document.getElementById('ctrl-next'),
+                ctrlBack: document.getElementById('ctrl-back'),
+                ctrlCancel: document.getElementById('ctrl-cancel')
             };
             this.el.main.setAttribute('style', 'display:block"');
             window.popstate = (e) => {
@@ -269,6 +273,8 @@
             if (this.state.pageName) {
                 await this._execute('page-' + this.state.pageName + '-after-render', passOnArgs);
             }
+
+            this.state.lastPageName = this.state.pageName;
 
             window.location.hash = this.state.pageName;
             window.history.pushState( this.state, 'Page '+this.state.pageName, window.location.toString() );
@@ -438,6 +444,16 @@
             <button style='display:none' id='authButton' name='authButton'>Log In</button>
         </p>
     </main>
+
+    <footer style='display:none'>
+        <div style='width:50%;float:left;'>
+            <button id='ctrl-cancel'>Cancel</button>
+        </div>
+        <div style='width:50%;float:left;text-align:right'>
+            <button id='ctrl-back'>Back</button>
+            <button id='ctrl-next'>Next</button>
+        </div>
+    </footer>
 
 
     <!-- Google Analytics: change UA-XXXXX-Y to be your site's ID.

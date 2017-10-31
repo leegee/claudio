@@ -2,18 +2,13 @@
 <html>
 
 <head>
-    <title>Simple Map</title>
+    <title>Map Preivew</title>
     <meta name="viewport" content="initial-scale=1.0">
     <meta charset="utf-8">
     <style>
-        /* Always set the map height explicitly to define the size of the div
-       * element that contains the map. */
-
         #map {
             height: 100%;
         }
-
-        /* Optional: Makes the sample page fill the window. */
 
         html,
         body {
@@ -24,7 +19,8 @@
     </style>
 
     <script>
-        var CONFIG, CONFIG_URL = 'Config.js';
+        'use strict';
+        var Map, CONFIG, CONFIG_URL = 'Config.js';
 
         async function main() {
             var _ = await fetch(CONFIG_URL);
@@ -32,47 +28,60 @@
             var script = document.createElement("script");
             script.setAttribute(
                 "src",
-                "https://maps.googleapis.com/maps/api/js?key=" + CONFIG.apiKey+ "&callback=initMap"
+                "https://maps.googleapis.com/maps/api/js?key=" + CONFIG.apiKey + "&callback=initMap"
             );
             document.getElementsByTagName("head")[0].appendChild(script);
         }
 
-        document.addEventListener("DOMContentLoaded", function(event) {
+        function initMap() {
+            var sku, tableId;
+            var params = document.location.search || document.location.hash;
+            tableId = params.match(/tableId=([^;&]+)/)[1];
+            sku = params.match(/sku=([^;&]+)/)[1];
+            if (!sku) {
+                sku = params;
+                // Now use the index.js.
+            }
+
+            document.title = document.title + ': ' + sku + ' in ' + tableId;
+            Map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 4,
+                center: new google.maps.LatLng(
+                    39.50, -98.35   //  LAT. 39°50' LONG. -98°35' - centre of the continental USA
+                )
+            });
+            sku = 'ARTHR';
+            var query = {
+                select: 'geometry',
+                from: tableId,
+                where: `'SKU' = '${sku}'`
+            };
+            console.log(sku, tableId, query);
+            var layer = new google.maps.FusionTablesLayer({
+                query: query,
+                styles: [
+                    {
+                        markerOptions: {
+                            iconName: "large_green"
+                        },
+                        polygonOptions: {
+                            fillColor: '#00FF00',
+                            fillOpacity: 0.3
+                        }
+                    }
+                ]
+            });
+            layer.setMap(Map);
+        }
+
+        document.addEventListener("DOMContentLoaded", function (event) {
             main();
         });
     </script>
-
 </head>
 
 <body>
     <div id="map"></div>
-    <script>
-        var map;
-        function initMap() {
-            var sku, tableId;
-            if (document.location.search) {
-                tableId = document.location.search.match(/tableId=([^;]+)/)[1];
-                sku = document.location.search.match(/sku=([^;]+)/)[1];
-            }
-            console.log(sku, tableId);
-            var center = new google.maps.LatLng(
-                39.50, -98.35   //  LAT. 39°50' LONG. -98°35' - centre of the continental USA
-            );
-            map = new google.maps.Map(document.getElementById('map'), {
-                center: center,
-                zoom: 4
-            });
-            var layer = new google.maps.FusionTablesLayer({
-                query: {
-                    select: '\'geometry\'',
-                    from: tableId,
-                    where: "sku='"+sku+"'"
-                }
-            });
-            layer.setMap(map);
-        }
-    </script>
 </body>
 
 </html>
-

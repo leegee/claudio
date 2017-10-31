@@ -283,7 +283,7 @@ body {
     font-family: 'Roboto', sans-serif;
 }
 
-header, main {
+header, main, footer {
     background: #DDD;
     padding: 1em;
     position: relative;
@@ -294,15 +294,18 @@ header {
     padding-bottom:0;
     margin-top: 0;
 }
-main {
+main, footer {
     padding-top: 0;
     margin-top: 0;
     padding-bottom: 4em;
     max-width: 600pt;
 }
 
+footer {
+}
+
 @media only screen and (min-width: 801pt) {
-    header, main {
+    header, main, footer {
         width: 600pt;
         left: -300pt;
         margin-left: 50%;
@@ -311,7 +314,6 @@ main {
 
 .page {
     display: none;
-    border: 1px solid #333;
     padding: 1em;
     margin: 1em 0;
 }
@@ -344,25 +346,4 @@ h1, h2, h3, h4, h5, h6 {
 header h2 {
     text-align: right;
     font-size: 10pt;
-}
-
-#currentPage::before {
-    content: 'Page ';
-    vertical-align: super;
-    font-size: 8pt;
-    font-weight: 100;
-    margin-left: -2em;
-}
-#pageNumber {
-    font-size: 12pt;
-    display: inline-block;
-    float: right;
-    background: skyblue;
-    color: white;
-    min-width: 2em;
-    line-height: 2em;
-    padding: 1em;
-    text-align: center;
-    border: 1px solid steelblue;
-    border-radius: 3em;
 }
