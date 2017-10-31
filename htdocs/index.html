@@ -50,7 +50,7 @@
                     indexJsDir: Config.indexBaseDir + new Date().toISOString().replace(/\W/g, '_'),
                     access_token: authResult.access_token
                 });
-                window.wizard.nextPage();
+                window.wizard.nextPage('intro');
             } else {
                 console.log('Not authorised');
                 var el = document.getElementById('authButton');
@@ -72,17 +72,16 @@
             return (await response.json()).items;
         }
 
-        var page2AfterRender = async function () {
+        var pageSelectSkusAfterRender = async function () {
             console.log('Enter page2-------------------------------');
             // window.wizard.fusionTableDetails = await asyncListTables();
             //     window.wizard.nextPage();
             // }
 
-            // var page2 = function () {
             document.getElementById('skusCsv').addEventListener('change', (e) => {
                 this.state.skusToProcess = document.getElementById('skusToProcess').value;
                 this.state.file = e.target.files[0];
-                this.nextPage();
+                this.nextPage('preview-upload');
             }, false);
             // document.getElementById('selectFusionTable').addEventListener('click', function () {
             //     var selectList = document.getElementById('fusionTableIds');
@@ -91,18 +90,17 @@
             // });
         }
 
-        var uploadAfterRender = async function () {
+        var pagePreviewUploadAfterRender = function () {
             console.log('Enter uploadAfterRender');
             document.getElementById('cancel-skus').addEventListener('click', document.location.reload, false);
-            document.getElementById('upload-skus').addEventListener('click', () => { window.wizard.nextPage() }, false);
-            return Promise.resolve();
+            document.getElementById('upload-skus').addEventListener('click', () => { window.wizard.nextPage('upload-skus') }, false);
         }
 
         /**
         * Before the cx closes, server will respond with HTML status updates.
         */
-        var page4 = async function () {
-            console.log('Enter page4 to send to CGI');
+        var pageUploadSkusAfterRender = async function () {
+            console.log('Enter upload to send to CGI');
             var buffer = '',
                 data = new FormData(),
                 logwindow = document.getElementById('logWindow'),
@@ -173,18 +171,12 @@
 
         /**
          * Pages are `script` elements of `type` `text/mustache`,
-         *  with an id attribute beginning `page-` and ending with a number.
-         *
-         * @example
-         *  <script type=<script type='text/mustache' id='page-100' data-page-name='manual-auth'> ...
-         *
-         * Pages are displayed sequentially via `Wizard.nextPage`, though the numbers need not be consecutive.
-         *
-         * Pages may be referred to by an 'ant-case' name defined in the template element's `data-page-name` attribute:
+         *  with a `data-page-name` attribute.
          *
          * @example
          *  <script type=<script type='text/mustache' data-page-name='manual-auth'> ...
-         *  <script type=<script type='text/mustache' id='page-100' data-page-name='manual-auth'> ...
+         *
+         * Pages are displayed via `Wizard.nextPage(:pageName)`.
          *
          * ## Data for Page Templates
          *
@@ -193,7 +185,7 @@
          * ## Linking Within Pages
          *
          * Before templates are displayed, hyperlinks are added to any element that has an attribute
-         * `data-goto-page`: the attribute's value can be a page number or name.
+         * `data-goto-page`: the attribute's value can be a page name.
          *
          * ## Code For Pages
          *
@@ -220,8 +212,7 @@
          */
         var Wizard = function (state) {
             this.state = {
-                pageIds: [],
-                pageNumber: 0
+                pageName: ''
             }; // window.history.popstate();?
             Object.keys(state).forEach((key) => {
                 this.state[key] = state[key];
@@ -229,48 +220,12 @@
             this.pageEl = null;
             this.el = {
                 main: document.getElementById('main'),
-                pageNumber: document.getElementById('pageNumber')
             };
             this.el.main.setAttribute('style', 'display:block"');
-            this.el.pageNumber.setAttribute('style', 'display:block"');
-            document.querySelectorAll('script[type="text/mustache"]').forEach((el) => {
-                var id = el.id.match(/^page-(\d+)$/)[1];
-                this.state.pageIds.push(Number(id));
-            });
-            this.state.pageIds = this.state.pageIds.sort(function (a, b) { return a > b });
-            console.log('Page IDs:', this.state.pageIds);
             window.popstate = (e) => {
                 console.log('POPSTATE ', e);
                 return false;  //pushstate
             };
-        }
-
-        /**
-         * Show a numbered page that also has data-page-name attribute that equates to the passed pageName argument,
-         * or a specific number.
-         *
-         * @param {string} pageName - string matching an element's `data-page-name` attribute.
-         * @returns void
-         */
-        Wizard.prototype.gotoPage = function (pageName) {
-            var pageNumber = Number(pageName) ? pageName : this.findPageNumber(pageName);
-            console.log('Wizard gotoPage, from ', this.state.pageNumber, ' to page ', pageName, ' which I think is ', pageNumber);
-            this.nextPage(pageNumber);
-        }
-
-        Wizard.prototype.findPageNumber = function (pageName) {
-            var rv;
-            try {
-                rv = Number( document.querySelector('script[type="text/mustache"][data-page-name="' + pageName + '"]').id.match(/^page-(\d+)$/)[1] );
-                this.state.pageName = pageName;
-                console.log('Found page, set pageName to ', this.state.pageName = pageName);
-            } catch (e) {
-                console.log('No such page as ', pageName);
-                rv = null;
-                this.state.pageName = null;
-            }
-            console.log('FindPageNumber found for page %s page number %d', pageName, rv);
-            return rv;
         }
 
         /**
@@ -287,53 +242,39 @@
          * @param {number} [pageNumber] - Optional page number to which to jump.
          * @return void
          */
-        Wizard.prototype.nextPage = async function (pageNumber) {
-            console.log('Enter Wizard.nextPage');
-            if (!pageNumber) {
-                this.state.pageName = null; // ?? Check
-                console.log('no pageNumber arg');
-                var el = document.getElementById('page-' + this.state.pageNumber);
-                if (el && el.dataset && el.dataset.nextPage) {
-                    pageNumber = this.findPageNumber(el.dataset.nextPage);
-                    console.log('set pageNumber from nextPage; is now ', pageNumber);
-                } else {
-                    console.log('no existing page/with nextPage, ', this.state.pageNumber);
-                    pageNumber = Number(this.state.pageNumber) + 1;
-                    console.log('inc pageNumber to ', pageNumber);
-                }
+         Wizard.prototype.gotoPage = function (pageName) {
+            this.nextPage(pageName);
+        }
+        Wizard.prototype.nextPage = async function (pageName) {
+            console.log('Enter Wizard.nextPage with ', pageName);
 
-                console.log('no pageNumber arg');
+            //             pageNumber = Number( document.querySelector('script[type="text/mustache"][data-page-name="' + pageName + '"]').id.match(/^page-(\d+)$/)[1] );
+
+            // If not told where to go, check the current template for instructions
+            if (! pageName) {
+                var node = document.querySelector('script[type="text/mustache"][data-page-name="' + pageName + '"]');
+                // ie this.pageEl
+                if (node && node.dataset && node.dataset.nextPage) {
+                    pageName = node.dataset.nextPage;
+                    console.log('Got next-page pageName from data-next-page: ', pageName);
+                }
+                else {
+                    console.error('No pageName supplied and no data-next-page found');
+                }
             }
 
-            this.pageEl = document.getElementById('page-' + pageNumber);
-
-            // No exact page number - find the next-highest number,
-            // remembering pages may have been added since we last looked at the DOM.
+            this.pageEl = document.querySelector('script[type="text/mustache"][data-page-name="' + pageName + '"]');
             if (! this.pageEl) {
-                for (var i = 0; i < this.state.pageIds.length; i++) {
-                    if (this.state.pageIds[i] > pageNumber) {
-                        pageNumber = this.state.pageIds[i];
-                        this.pageEl = document.getElementById('page-' + pageNumber);
-                        break;
-                    }
-                }
-                if (! this.pageEl) {
-                    this.el.main.innerHTML = '<h2>Error</h2><p>Could not find the requested page, ' + pageNumber + '</p>';
-                    return;
-                }
+                this.el.main.innerHTML = '<h2>Error</h2><p>Could not find the requested page, ' + pageName + '</p>';
+                return;
             }
 
-            console.log('Wizard.nextPage from page # %d to # %d, named %s', this.state.pageNumber, pageNumber, this.state.pageName);
-            this.state.pageNumber = pageNumber;
+            this.state.pageName = pageName;
 
             var fnNames = [
-                'page' + this.state.pageNumber,
-                'page' + this.state.pageNumber + '-before-render'
+                'page' + this.state.pageName,
+                'page' + this.state.pageName + '-before-render'
             ];
-            if (this.state.pageName) {
-                fnNames.push( this._antsToCamelCase('page-' + this.state.pageName));
-                fnNames.push( this._antsToCamelCase('page-' + this.state.pageName + '-before-render'));
-            }
 
             await this._execute(fnNames);
 
@@ -341,15 +282,14 @@
 
             if (this.state.pageName) {
                 await this._execute([
-                    this._antsToCamelCase('page-' + this.state.pageNumber + '-after-render'),
                     this._antsToCamelCase('page-' + this.state.pageName + '-after-render')
                 ]);
             }
 
-            window.location.hash = this.state.pageNumber;
-            window.history.pushState( this.state, 'Page '+this.state.pageNumber, window.location.toString() );
+            window.location.hash = this.state.pageName;
+            window.history.pushState( this.state, 'Page '+this.state.pageName, window.location.toString() );
 
-            console.log('Page = ', this.state.pageNumber);
+            console.log('Page = ', this.state.pageName);
         }
 
         Wizard.prototype._execute = async function (fns) {
@@ -359,6 +299,7 @@
             for (fn of fns) {
                 console.log('Try to execute ', fn);
                 if (typeof window[fn] === 'function') {
+                    console.log('Found ', fn);
                     var rv =window[fn].call(this, arguments);
                     if (typeof rv === 'object' && rv.then && typeof rv.then === 'function') {
                         console.log('Await');
@@ -380,7 +321,6 @@
                     this.pageEl.innerHTML.toString(),
                     { wizard: this }
                 );
-                this.el.pageNumber.innerText = this.state.pageNumber;
                 var links = document.querySelectorAll('[data-goto-page]');
                 for (var el of links) {
                     el.onclick = (e) => {
@@ -406,7 +346,7 @@
         </p>
     </script>
 
-    <script type='text/mustache' id='page-1'>
+    <script type='text/mustache' data-page-name='intro'>
         <p>
             We have too much data to fit into a single Fusion table, so this
             app creates several tables and an index which is referenced by
@@ -418,7 +358,7 @@
         </ul>
     </script>
 
-    <script type='text/mustache' id='page-2' data-page-name='select-skus'>
+    <script type='text/mustache'data-page-name='select-skus'>
         <fieldset>
             <legend>Upload SKU Geography</legend>
             <div id='enterSkusToProcess'>
@@ -429,6 +369,7 @@
                 <p><label for='skusCsv'>To create a new Fusion Table, select a SKU CSV file from your local machine:</label></p>
                 <p><input type='file' name='skusCsv' id='skusCsv' placeholder='SKUs CSV' type='.csv'></p>
             </div>
+            <!--
             <div id='listFusionTables' style='display:none'>
                 <p>Or choose an existing Fusion Table from this list of tables stored in your Google account:</p>
                 <select id='fusionTableIds' name='fusionTableIds'>
@@ -437,11 +378,12 @@
                     {{/wizard.fusionTableDetails}}
                 </select>
                 <button id='selectFusionTable' name='selectFusionTable'>Choose</button>
-            </fieldset>
+            -->
+        </fieldset>
         </div>
     </script>
 
-    <script type='text/mustache' id='page-3' data-page-name='upload'>
+    <script type='text/mustache' id='page-3' data-page-name='preview-upload'>
         Page 3.
         <div id='meta'>
             <p>USDA SKUs to process:</p>
@@ -451,11 +393,11 @@
             <dt>Size<dt><dd>{{wizard.state.file.size}}</dd>
             <dt>Last Modified<dt><dd>{{wizard.state.file.lastModifiedDate}}</dd>
         </dl>
-        <button id="upload-skus">Process this SKU/geography file</button>
+        <button id="upload-skus">Process this SKU/geography file?</button>
         <button id="cancel-skus">Cancel</button>
     </script>
 
-    <script type='text/mustache' id='page-4'>
+    <script type='text/mustache' id='page-4' data-page-name='upload-skus'>
         <p> Creating maps... </p>
         <div id='logWindow'></div>
     </script>
@@ -488,9 +430,7 @@
         <![endif]-->
 
     <header>
-        <h1>Map Updater
-            <span id='pageNumber'>1</span>
-        </h1>
+        <h1>Map Updater</h1>
     </header>
 
     <main id='main'>
