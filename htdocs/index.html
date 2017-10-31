@@ -120,12 +120,16 @@
         }
 
         var pageReviewSpecificIndexBeforeRender = async function (e) {
-            // Called by click event
+            var jobName;
             if (e instanceof Array) {
-                console.log('xxxx', e);
-                jobName = '/' + this.state.indexBaseDir + '/' + e[0].target.innerText;
-            } else {
+                e = e[0]
+            }
+            console.log('xxxx', e);
+            if (typeof e === 'string') {
                 jobName = e;
+            } else {
+                // Called by click event
+                jobName = '/' + this.state.indexBaseDir + '/' + e.target.innerText;
             }
             var url = (jobName + '/index.js').replace(/\/+/g, '/');
             var response = await window.fetch(url);
@@ -308,6 +312,9 @@
                 );
                 var links = document.querySelectorAll('[data-goto-page]');
                 for (var el of links) {
+                    el.setAttribute('style',
+                        el.getAttribute('style') + ';cursor:pointer;'
+                    );
                     el.onclick = (e) => {
                         this.nextPage(e.target.dataset.gotoPage, e);
                     };
