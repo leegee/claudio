@@ -49,12 +49,12 @@
         };
 
         const authString = function () {
-            return 'key=' + Config.apiKey + '&access_token=' + window.wizard.state.access_token;
+            return 'key=' + Config.apiKey + '&access_token=' + this.state.access_token;
         };
 
         var asyncListTables = async function () {
             const response = await window.fetch(
-                'https://www.googleapis.com/fusiontables/v2/tables?' + authString(),
+                'https://www.googleapis.com/fusiontables/v2/tables?' + this.authString(),
             );
             return (await response.json()).items;
         }
@@ -115,7 +115,7 @@
                     console.error('Not ready', request.readyState, request.responseText);
                 }
             }
-            request.open('POST', Config.endpoints.uploadSkus + '?' + authString());
+            request.open('POST', Config.endpoints.uploadSkus + '?' + this.authString());
             request.send(data);
         }
 
@@ -143,16 +143,19 @@
                 this.state.indexBaseDir
             );
             var text = await response.text();
-            wizard.state.indexes = _linksFromText(text);
+            console.log('Got the text', text);
+            this.state.indexes = _linksFromText(text);
+            console.log('Leaving, having set ', this.state.indexes);
         }
 
         var _linksFromText = function (str) {
-            var match;
-            var rv = [];
-            do {
-                match = /\bhref=(.)([^/]+?)\/\1/g.exec(str);
-                if (match) rv.push(match[2]);
-            } while (match);
+            var m,
+                rv = [],
+                regexp = /\bhref=(.)([^/]+?)\/\1/g
+            ;
+            while (m = regexp.exec(str)) {
+                rv.push( m[2])
+            }
             return rv;
         }
 
@@ -283,9 +286,12 @@
                 }
             }
             if (promises) {
+                console.log('Waiting on ', promises.length, promises);
                 await Promise.all(promises);
+                console.log('Done all promises');
             }
             else {
+                console.log('Leave now');
                 return Promise.resolve();
             }
         };
@@ -300,7 +306,7 @@
                 var links = document.querySelectorAll('[data-goto-page]');
                 for (var el of links) {
                     el.onclick = (e) => {
-                        window.wizard.nextPage(e.target.dataset.gotoPage, e);
+                        this.nextPage(e.target.dataset.gotoPage, e);
                     };
                 };
             } catch (e) {
@@ -369,12 +375,12 @@
         <button id="cancel-skus">Cancel</button>
     </script>
 
-    <script type='text/mustache' id='page-4' data-page-name='upload-skus'>
+    <script type='text/mustache' data-page-name='upload-skus'>
         <h2>Creating maps... </h2>
         <div id='logWindow'></div>
     </script>
 
-    <script type='text/mustache' id='page-10' data-page-name='review-indexes'>
+    <script type='text/mustache' data-page-name='review-indexes'>
         <h2>Please select an index</h2>
         {{window.wizard.state.indexes}}
         <ul>
@@ -384,12 +390,12 @@
         </ul>
     </script>
 
-    <script type='text/mustache' id='page-11' data-page-name='no-indexes'>
+    <script type='text/mustache' data-page-name='no-indexes'>
         <h2>There are no indexes.</h2>
         <p>Please upload some SKU/geography.</h2>
     </script>
 
-    <script type='text/mustache' id='page-20' data-page-name='review-specific-index'>
+    <script type='text/mustache' data-page-name='review-specific-index'>
         <h2>Preview Maps</h2>
         <ul>
         {{#wizard.state.skus2ids}}
