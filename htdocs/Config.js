@@ -1,5 +1,5 @@
 {
-    "apikey": "AIzaSyDAdOILIN2SPM_1iPKJMbHd9jOck8H9J7o",
+    "apiKey": "AIzaSyDAdOILIN2SPM_1iPKJMbHd9jOck8H9J7o",
     "clientId": "837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com",
     "scopes": "https://www.googleapis.com/auth/fusiontables",
     "fusion": {
