@@ -48,13 +48,13 @@
             }
         };
 
-        const authString = function () {
-            return 'key=' + Config.apiKey + '&access_token=' + this.state.access_token;
+        const authString = function (accessToken) {
+            return 'key=' + Config.apiKey + '&access_token=' + accessToken;
         };
 
         var asyncListTables = async function () {
             const response = await window.fetch(
-                'https://www.googleapis.com/fusiontables/v2/tables?' + authString(),
+                'https://www.googleapis.com/fusiontables/v2/tables?' + authString(this.state.access_token),
             );
             return (await response.json()).items;
         }
@@ -115,7 +115,7 @@
                     console.error('Not ready', request.readyState, request.responseText);
                 }
             }
-            request.open('POST', Config.endpoints.uploadSkus + '?' + authString());
+            request.open('POST', Config.endpoints.uploadSkus + '?' + authString(this.state.access_token));
             request.send(data);
         }
 
