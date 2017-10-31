@@ -17,24 +17,11 @@
     <meta name="google-signin-client_id" content="837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com">
 
     <script>
-        var Config = {
-            apikey: 'AIzaSyDAdOILIN2SPM_1iPKJMbHd9jOck8H9J7o',
-            clientId: '837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com',
-            scopes: 'https://www.googleapis.com/auth/fusiontables',
-            fusion: {
-                name: 'lee-dev',
-                countiesTableId: '1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV',
-                sheetNameStem: 'lee-dev-',
-                maxRetries: 3
-            },
-            endpoints: {
-                uploadSkus: '/cgi-bin/upload-skus.cgi'
-            },
-            indexBaseDir: 'temp',
-            reLinksFromText: /\bhref=(.)([^/]+?)\/\1/g
-        };
+        var Config, Config_Url = 'Config.js';
 
-        var ENTER = function () {
+        var ENTER = async function () {
+            var _ = await fetch(Config_Url);
+            Config = await _.json();
             gapi.auth.authorize({
                 client_id: Config.clientId,
                 scope: Config.scopes,
@@ -131,14 +118,16 @@
             request.send(data);
         }
 
-        var pageReviewSpecificIndexAfterRender = async function ([e]) {
+        var pageReviewSpecificIndexBeforeRender = async function ([e]) {
             var jobName = e.target.innerText;
-            var response = await window.fetch(
-                window.wizard.state.indexBaseDir + '/' + jobName + '/index.js'
-            );
-            window.wizard.state.indexJs = await response.json();
-            // Map the index to something the page can display:
-            // ....todo.....
+            var url = this.state.indexBaseDir + '/' + jobName + '/index.js';
+            var response = await window.fetch(url);
+            var json = await response.json();
+            this.state.skus2ids = [];
+            for (var sku in json.skus2tableIds) {
+                this.state.skus2ids.push( { sku, id: json.skus2tableIds[sku]});
+            }
+            console.log('Leave pageReviewSpecificIndexBeforeRender with ', this.state.skus2ids)
         }
 
         // Relies upon server auto-indexing (NB .htaccess created in Izel.pm)
@@ -154,7 +143,7 @@
             var match;
             var rv = [];
             do {
-                match = Config.reLinksFromText.exec(str);
+                match = /\bhref=(.)([^/]+?)\/\1/g.exec(str);
                 if (match) rv.push(match[2]);
             } while (match);
             return rv;
@@ -267,29 +256,30 @@
             window.location.hash = this.state.pageName;
             window.history.pushState( this.state, 'Page '+this.state.pageName, window.location.toString() );
 
-            console.log('Page = ', this.state.pageName);
+            console.log('Leave nextPage with page = ', this.state.pageName);
         }
 
         Wizard.prototype._execute = async function (fns, passOnArgs) {
             console.log('Wizard._execute', fns);
             if (! fns) return;
+            var promises = [];
             if (typeof fns === 'string') fns = [fns];
             for (f of fns) {
                 var fn = this._antsToCamelCase(f);
-                console.log('Try to execute ', fn);
+                console.log('Look for ', fn);
                 if (typeof window[fn] === 'function') {
-                    console.log('Found ', fn);
-                    var rv =window[fn].call(this, passOnArgs);
-                    if (typeof rv === 'object' && rv.then && typeof rv.then === 'function') {
-                        console.log('Await');
-                        try {
-                            await rv;
-                        } catch (e) {
-                            console.error(e);
-                        }
-                        console.log('Done waiting.');
-                    }
+                    console.log('Found %s, calling....', fn);
+                    promises.push( window[fn].call(this, passOnArgs) );
+                    console.log('...called  %s', fn);
+                } else {
+                    console.log('Did not find ', fn);
                 }
+            }
+            if (promises) {
+                await Promise.all(promises);
+            }
+            else {
+                return Promise.resolve();
             }
         };
 
@@ -338,35 +328,31 @@
     </script>
 
     <script type='text/mustache'data-page-name='select-skus'>
-        <fieldset>
-            <legend>Upload SKU Geography</legend>
-            <div id='enterSkusToProcess'>
-                <p><label for='skusToProess'>Please enter a list of USDA symbols/SKUs to proceess. Separate mulitple values with spaces and/or commas.</p>
-                <ul><textarea id='skusToProcess' name='skusToProcess'></textarea>
-            </div>
-            <div id='selectCsv'>
-                <p><label for='skusCsv'>To create a new Fusion Table, select a SKU CSV file from your local machine:</label></p>
-                <p><input type='file' name='skusCsv' id='skusCsv' placeholder='SKUs CSV' type='.csv'></p>
-            </div>
-            <!--
-            <div id='listFusionTables' style='display:none'>
-                <p>Or choose an existing Fusion Table from this list of tables stored in your Google account:</p>
-                <select id='fusionTableIds' name='fusionTableIds'>
-                    {{#wizard.fusionTableDetails}}
-                        <option value='{{tableId}}'>{{name}} - {{description}}</option>
-                    {{/wizard.fusionTableDetails}}
-                </select>
-                <button id='selectFusionTable' name='selectFusionTable'>Choose</button>
-            -->
-        </fieldset>
+        <h2>Upload SKU Geography</h2>
+        <div id='enterSkusToProcess'>
+            <p><label for='skusToProess'>Please enter a list of USDA symbols/SKUs to proceess. Separate mulitple values with spaces and/or commas.</p>
+            <ul><textarea id='skusToProcess' name='skusToProcess'></textarea>
         </div>
+        <div id='selectCsv'>
+            <p><label for='skusCsv'>To create a new Fusion Table, select a SKU CSV file from your local machine:</label></p>
+            <p><input type='file' name='skusCsv' id='skusCsv' placeholder='SKUs CSV' type='.csv'></p>
+        </div>
+        <!--
+        <div id='listFusionTables' style='display:none'>
+            <p>Or choose an existing Fusion Table from this list of tables stored in your Google account:</p>
+            <select id='fusionTableIds' name='fusionTableIds'>
+                {{#wizard.fusionTableDetails}}
+                    <option value='{{tableId}}'>{{name}} - {{description}}</option>
+                {{/wizard.fusionTableDetails}}
+            </select>
+            <button id='selectFusionTable' name='selectFusionTable'>Choose</button>
+        -->
     </script>
 
     <script type='text/mustache' id='page-3' data-page-name='preview-upload'>
-        Page 3.
-        <div id='meta'>
-            <p>USDA SKUs to process:</p>
-            <p>{{wizard.state.skusToProcess}}</p>
+        <h2>Does this look right?</h2>
+        <p>USDA SKUs to process:</p>
+        <p>{{wizard.state.skusToProcess}}</p>
         <dl>
             <dt>Name<dt><dd>{{wizard.state.file.name}}</dd>
             <dt>Size<dt><dd>{{wizard.state.file.size}}</dd>
@@ -377,12 +363,12 @@
     </script>
 
     <script type='text/mustache' id='page-4' data-page-name='upload-skus'>
-        <p> Creating maps... </p>
+        <h2>Creating maps... </h2>
         <div id='logWindow'></div>
     </script>
 
     <script type='text/mustache' id='page-10' data-page-name='review-indexes'>
-        <p> Please select an index. </p>
+        <h2>Please select an index</h2>
         {{window.wizard.state.indexes}}
         <ul>
             {{#wizard.state.indexes}}
@@ -392,13 +378,21 @@
     </script>
 
     <script type='text/mustache' id='page-11' data-page-name='no-indexes'>
-        <p>There are no indexes. Please upload some SKU/geography.</p>
+        <h2>There are no indexes.</h2>
+        <p>Please upload some SKU/geography.</h2>
     </script>
 
     <script type='text/mustache' id='page-20' data-page-name='review-specific-index'>
-        {{#wizard.state.indexJs.tableInternalId2googleTableId}}
-            <h3><a href="https://fusiontables.google.com/DataSource?docid={{.}}#map:id=3>Map {{}}</a>
-        {{/wizard.state.indexJs.tableInternalId2googleTableId}}
+        <h2>Preview Maps</h2>
+        <ul>
+        {{#wizard.state.skus2ids}}
+            <li>
+                <a target='_new' href='preview-map.html?sku={{sku}};tableId={{id}}'>
+                    {{sku}}
+                </a>
+            </li>
+        {{/wizard.state.skus2ids}}
+        </ul>
     </script>
 
 </head>
@@ -413,9 +407,7 @@
     </header>
 
     <main id='main'>
-        <p>
-            Welcome to the map making page.
-        </p>
+        <h2>Welcome to the map making page.</h2>
         <p>
             Authorising with Google....
         </p>
