@@ -1,4 +1,7 @@
 htdocs/cgi-bin/temp/**/*
+htdocs/cgi-bin/cgi.log
+htdocs/cgi-bin/sqlite.db
+htdocs/_
 node_modules/
 logs/
 lib/
@@ -8,3 +11,5 @@ README.txt
 izelplants-fusion-tables
 .env.js
 reports/
+temp/
+*.old
