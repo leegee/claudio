@@ -175,6 +175,7 @@ sub create {
 
 	if (!-d $self->{output_dir}) {
 		mkdir $self->{output_dir} or die "$! - $self->{output_dir}";
+		INFO 'Created output_dir, ' . $self->{output_dir};
 	}
 
 	$self->create_htaccess;

@@ -43,7 +43,7 @@ Izel::upload_skus(
     skus_file_handle    => $IN,
     auth_string         => $ENV{QUERY_STRING},
     skus_text           => $cgi->param('skus-text'),
-    output_dir          => $ENV{DOCUMENT_ROOT} . $cgi->param('index_js_dir'),
+    output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
 );
 
 exit;

@@ -11,5 +11,5 @@
     "endpoints": {
         "uploadSkus": "/cgi-bin/upload-skus.cgi"
     },
-    "indexBaseDir": "temp"
+    "indexBaseDir": "/temp/"
 }
