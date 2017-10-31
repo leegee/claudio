@@ -412,7 +412,8 @@ sub first_and_last_sku {
 
 sub set_name_from_skus {
 	my $self = shift;
-	$self->{name} = 'SKU/Geo Table #' . $self->{index_number}
+	my $prefix = $_[0] ? " $_[0]" : "";
+	$self->{name} = $prefix . 'Table #' . $self->{index_number}
 		. ' (' . join(' - ', $self->first_and_last_sku()) .')';
 }
 
@@ -463,7 +464,7 @@ sub _create_table_on_google {
     TRACE "Enter";
 	my $self = shift;
 
-	$self->set_name_from_skus;
+	$self->set_name_from_skus('SKU/Geo');
 	$self->require_defined_fields(qw/ index_number name /);
 
 	my $table = {
@@ -624,7 +625,8 @@ sub _execute_gsql {
 sub _create_merge {
 	TRACE 'Enter';
 	my $self = shift;
-	my $new_table_name = 'Table Merge ' . $self->{index_number};
+	$self->set_name_from_skus('Merged');
+	my $new_table_name = $self->{name};
 	my $gsql = "CREATE VIEW '$new_table_name' AS (
 		SELECT * FROM $self->{table_id} AS Skus
 			LEFT OUTER JOIN $self->{us_counties_table_id} AS Map
