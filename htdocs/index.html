@@ -54,7 +54,7 @@
 
         var asyncListTables = async function () {
             const response = await window.fetch(
-                'https://www.googleapis.com/fusiontables/v2/tables?' + this.authString(),
+                'https://www.googleapis.com/fusiontables/v2/tables?' + authString(),
             );
             return (await response.json()).items;
         }
@@ -115,24 +115,27 @@
                     console.error('Not ready', request.readyState, request.responseText);
                 }
             }
-            request.open('POST', Config.endpoints.uploadSkus + '?' + this.authString());
+            request.open('POST', Config.endpoints.uploadSkus + '?' + authString());
             request.send(data);
         }
 
         var pageReviewSpecificIndexBeforeRender = async function (e) {
             // Called by click event
-            if (typeof e === 'array') {
-                e = e[0];
+            if (e instanceof Array) {
+                console.log('xxxx', e);
                 jobName = '/' + this.state.indexBaseDir + '/' + e[0].target.innerText;
             } else {
                 jobName = e;
             }
-            var url = jobName + '/index.js';
+            var url = (jobName + '/index.js').replace(/\/+/g, '/');
             var response = await window.fetch(url);
             var json = await response.json();
             this.state.skus2ids = [];
-            for (var sku in json.skus2tableIds) {
-                this.state.skus2ids.push( { sku, id: json.skus2tableIds[sku]});
+            for (var sku in json.sku2tableInternalId) {
+                this.state.skus2ids.push({
+                    sku,
+                    id: json.tableInternalId2googleTableId[ json.sku2tableInternalId[sku] ]
+                });
             }
             console.log('Leave pageReviewSpecificIndexBeforeRender with ', this.state.skus2ids)
         }
