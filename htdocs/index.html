@@ -34,7 +34,7 @@
             if (authResult && !authResult.error) {
                 window.wizard = new Wizard({
                     indexBaseDir: Config.indexBaseDir,
-                    indexJsDir: Config.indexBaseDir + new Date().toISOString().replace(/\W/g, '_'),
+                    indexJsDir: Config.indexBaseDir + new Date().toISOString().replace(/\W/g, '_') + '/',
                     access_token: authResult.access_token
                 });
                 window.wizard.nextPage('intro');
@@ -96,11 +96,12 @@
                     logwindow.innerHTML = html;
                     logwindow.scrollTop = logwindow.scrollHeight + logwindow.clientHeight;
                 }
-                ;
+            ;
+            logwindow.setAttribute('style', 'position:relative;overflow:auto;height:20em');
 
-            data.append('skus-text', window.wizard.state.skusToProcess);
-            data.append('skus-file', window.wizard.state.file);
-            data.append('index_js_dir', window.wizard.state.indexJsDir);
+            data.append('skus-text', this.state.skusToProcess);
+            data.append('skus-file', this.state.file);
+            data.append('index_js_dir', this.state.indexJsDir);
 
             request.onreadystatechange = () => {
                 if (request.responseText.length) {
@@ -108,7 +109,7 @@
                 }
                 if (request.readyState === XMLHttpRequest.DONE) {
                     console.log('CGI processing and Google processing complete.');
-                    window.wizard.nextPage('review-specific-index');
+                    window.wizard.nextPage('review-specific-index', this.state.indexJsDir);
                     return Promise.resolve();
                 } else {
                     console.error('Not ready', request.readyState, request.responseText);
@@ -118,9 +119,15 @@
             request.send(data);
         }
 
-        var pageReviewSpecificIndexBeforeRender = async function ([e]) {
-            var jobName = e.target.innerText;
-            var url = this.state.indexBaseDir + '/' + jobName + '/index.js';
+        var pageReviewSpecificIndexBeforeRender = async function (e) {
+            // Called by click event
+            if (typeof e === 'array') {
+                e = e[0];
+                jobName = '/' + this.state.indexBaseDir + '/' + e[0].target.innerText;
+            } else {
+                jobName = e;
+            }
+            var url = jobName + '/index.js';
             var response = await window.fetch(url);
             var json = await response.json();
             this.state.skus2ids = [];
