@@ -290,7 +290,13 @@ header, main {
     overflow: auto;
 }
 
+header {
+    padding-bottom:0;
+    margin-top: 0;
+}
 main {
+    padding-top: 0;
+    margin-top: 0;
     padding-bottom: 4em;
     max-width: 600pt;
 }
