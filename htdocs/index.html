@@ -57,7 +57,7 @@
                 // No access token could be retrieved, show the button to start the authorization flow.
                 el.addEventListener('click', ENTER);
                 el.setAttribute('style', 'display:block');
-                window.wizard.gotoPage('manual-auth');
+                window.wizard.nextPage('manual-auth');
             }
         };
 
@@ -86,7 +86,7 @@
             // document.getElementById('selectFusionTable').addEventListener('click', function () {
             //     var selectList = document.getElementById('fusionTableIds');
             //     window.wizard.state.tableId = selectList.options[ selectList.selectedIndex ].value;
-            //     window.wizard.gotoPage('merge');
+            //     window.wizard.nextPage('merge');
             // });
         }
 
@@ -121,7 +121,7 @@
                 }
                 if (request.readyState === XMLHttpRequest.DONE) {
                     console.log('CGI processing and Google processing complete.');
-                    window.wizard.gotoPage('review-specific-index');
+                    window.wizard.nextPage('review-specific-index');
                     return Promise.resolve();
                 } else {
                     console.error('Not ready', request.readyState, request.responseText);
@@ -131,32 +131,23 @@
             request.send(data);
         }
 
-        var page6 = function () {
-            console.log('page 6: ', window.wizard.state.indexJsDir);
-        }
-
-        var reviewSpecificIndex = async function () {
+        var pageReviewSpecificIndexAfterRender = async function (e) {
+            var jobName = e.target.innerText;
             var response = await window.fetch(
-                window.wizard.state.indexJsDir + '/index.js'
+                window.wizard.state.indexJsDir + jobName + '/index.js'
             );
             window.wizard.state.indexJs = await response.json();
             // Map the index to something the page can display:
             // ....todo.....
-            window.wizard.gotoPage('review-specific-index');
         }
 
         // Relies upon server auto-indexing (NB .htaccess created in Izel.pm)
         var pageReviewIndexesBeforeRender = async function () {
-            console.log('pageReviewIndexesAfter');
             var response = await window.fetch(
                 this.state.indexBaseDir
             );
             var text = await response.text();
             wizard.state.indexes = _linksFromText(text);
-            console.log('wizard.state.indexes = ', wizard.state.indexes);
-            debugger;
-            // this.render();
-            // window.wizard.gotoPage('review-indexes');
         }
 
         var _linksFromText = function (str) {
@@ -242,25 +233,13 @@
          * @param {number} [pageNumber] - Optional page number to which to jump.
          * @return void
          */
-         Wizard.prototype.gotoPage = function (pageName) {
-            this.nextPage(pageName);
-        }
-        Wizard.prototype.nextPage = async function (pageName) {
-            console.log('Enter Wizard.nextPage with ', pageName);
-
-            //             pageNumber = Number( document.querySelector('script[type="text/mustache"][data-page-name="' + pageName + '"]').id.match(/^page-(\d+)$/)[1] );
+        Wizard.prototype.nextPage = async function (pageName, ...passOnArgs) {
+            console.log('Enter Wizard.nextPage with %s -----------------------------------------', pageName);
 
             // If not told where to go, check the current template for instructions
-            if (! pageName) {
-                var node = document.querySelector('script[type="text/mustache"][data-page-name="' + pageName + '"]');
-                // ie this.pageEl
-                if (node && node.dataset && node.dataset.nextPage) {
-                    pageName = node.dataset.nextPage;
-                    console.log('Got next-page pageName from data-next-page: ', pageName);
-                }
-                else {
-                    console.error('No pageName supplied and no data-next-page found');
-                }
+            if (! pageName && this.pageEl.nextPageName) {
+                pageName = this.pageEl.nextPageName;
+                console.log('Got next-page pageName from data-next-page: ', pageName);
             }
 
             this.pageEl = document.querySelector('script[type="text/mustache"][data-page-name="' + pageName + '"]');
@@ -268,6 +247,7 @@
                 this.el.main.innerHTML = '<h2>Error</h2><p>Could not find the requested page, ' + pageName + '</p>';
                 return;
             }
+            this.state.nextPageName = this.pageEl.dataset.nextPage || null;
 
             this.state.pageName = pageName;
 
@@ -276,14 +256,12 @@
                 'page-' + this.state.pageName + '-before-render'
             ];
 
-            await this._execute(fnNames);
+            await this._execute(fnNames, passOnArgs);
 
             this.render();
 
             if (this.state.pageName) {
-                await this._execute([
-                    this._antsToCamelCase('page-' + this.state.pageName + '-after-render')
-                ]);
+                await this._execute('page-' + this.state.pageName + '-after-render', passOnArgs);
             }
 
             window.location.hash = this.state.pageName;
@@ -292,15 +270,16 @@
             console.log('Page = ', this.state.pageName);
         }
 
-        Wizard.prototype._execute = async function (fns) {
+        Wizard.prototype._execute = async function (fns, passOnArgs) {
             console.log('Wizard._execute', fns);
             if (! fns) return;
             if (typeof fns === 'string') fns = [fns];
-            for (fn of fns) {
+            for (f of fns) {
+                var fn = this._antsToCamelCase(f);
                 console.log('Try to execute ', fn);
                 if (typeof window[fn] === 'function') {
                     console.log('Found ', fn);
-                    var rv =window[fn].call(this, arguments);
+                    var rv =window[fn].call(this, passOnArgs);
                     if (typeof rv === 'object' && rv.then && typeof rv.then === 'function') {
                         console.log('Await');
                         try {
@@ -324,7 +303,7 @@
                 var links = document.querySelectorAll('[data-goto-page]');
                 for (var el of links) {
                     el.onclick = (e) => {
-                        window.wizard.gotoPage(e.target.dataset.gotoPage)
+                        window.wizard.nextPage(e.target.dataset.gotoPage, e);
                     };
                 };
             } catch (e) {
@@ -407,7 +386,7 @@
         {{window.wizard.state.indexes}}
         <ul>
             {{#wizard.state.indexes}}
-                <li>{{.}}</li>
+                <li data-goto-page='review-specific-index'>{{.}}</li>
             {{/wizard.state.indexes}}
         </ul>
     </script>
