@@ -272,8 +272,8 @@
             this.state.pageName = pageName;
 
             var fnNames = [
-                'page' + this.state.pageName,
-                'page' + this.state.pageName + '-before-render'
+                'page-' + this.state.pageName,
+                'page-' + this.state.pageName + '-before-render'
             ];
 
             await this._execute(fnNames);
