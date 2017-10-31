@@ -470,7 +470,7 @@ sub _create_table_on_google {
 	my $table = {
 		name => $self->{name},
 		isExportable => 'true',
-		description => 'Table ' . $self->{index_number},
+		description => $self->{name} . ' - table ' . $self->{index_number},
 		columns => [
 			{
 				name => "GEO_ID2",
