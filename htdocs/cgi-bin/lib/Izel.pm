@@ -412,7 +412,7 @@ sub first_and_last_sku {
 
 sub set_name_from_skus {
 	my $self = shift;
-	my $prefix = $_[0] ? " $_[0]" : "";
+	my $prefix = $_[0] ? "$_[0] " : "";
 	$self->{name} = $prefix . 'Table #' . $self->{index_number}
 		. ' (' . join(' - ', $self->first_and_last_sku()) .')';
 }
