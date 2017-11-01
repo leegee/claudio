@@ -541,7 +541,7 @@ sub _create_table_on_google {
 # if it is a reference to an array, it is assumed to be gSQL.
 sub _post_blob {
 	my ($self, $url, $payload) = @_;
-	TRACE 'Enter for ', $url;
+	TRACE 'Enter _post_blob for ', $url;
 	my $isFormData;
 
 	if (ref $payload) {
@@ -658,6 +658,7 @@ sub _execute_gsql {
 	my ($self, @gsql) = @_;
 	TRACE "Posting form gSQL to ", $CONFIG->{endpoints}->{gsql};
 	my $res = $self->_post_blob( $CONFIG->{endpoints}->{gsql}, \@gsql);
+	INFO 'Executed gsql';
 	return $res;
 }
 
@@ -676,6 +677,7 @@ sub _create_merge {
 	my $res = $self->_execute_gsql($gsql);
 	if ($res->{content} and $res->{content}->{rows}) {
 		$self->{merged_table_google_id} = $res->{content}->{rows}->[0]->[0];
+		INFO "Created merged table.";
 	} else {
 		LOGCONFESS 'Unexpected response to gsql:', $gsql, "\nResponse:", Dumper $res;
 	}
