@@ -16,6 +16,23 @@
 
     <meta name="google-signin-client_id" content="837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com">
 
+    <style>
+        ul.skus {
+            display: block;
+            padding-left: 0;
+            margin-left: 1em;
+            text-align: justify;
+            text-align-last: center;
+        }
+        ul.skus li {
+            display: inline;
+            padding-left: 0;
+            margin-left: 0;
+            margin-right: 1em;
+            list-style: none;
+        }
+    </style>
+
     <script>
         var Config, Config_Url = 'Config.js';
 
@@ -120,18 +137,17 @@
         }
 
         var pageReviewSpecificIndexBeforeRender = async function (e) {
-            var jobName;
             if (e instanceof Array) {
                 e = e[0]
             }
             console.log('xxxx', e);
             if (typeof e === 'string') {
-                jobName = e;
+                this.state.jobName = e;
             } else {
                 // Called by click event
-                jobName = '/' + this.state.indexBaseDir + '/' + e.target.innerText;
+                this.state.jobName = ('/' + this.state.indexBaseDir + '/' + e.target.innerText).replace(/\/+/g, '/');
             }
-            var url = (jobName + '/index.js').replace(/\/+/g, '/');
+            var url = (this.state.jobName + '/index.js').replace(/\/+/g, '/');
             var response = await window.fetch(url);
             var json = await response.json();
             this.state.skus2ids = [];
@@ -418,7 +434,8 @@
     </script>
 
     <script type='text/mustache' data-page-name='review-specific-index'>
-        <h2>Publish Maps</h2>
+        <h2>{{wizard.state.jobName}}</h2>
+        <h3>Publish Maps</h3>
         <p>Maps need to be published by hand before they can be previewed. This will not effect the website's maps.</p>
         <p>
             Follow each link, select <kbd>File</kbd> &gt; <kbd>Share</kbd> &gt; <q>Private (change)</q> &gt;
@@ -429,8 +446,8 @@
                 <li><a target='_new' href='https://fusiontables.google.com/DataSource?docid={{.}}'>{{.}}</a></li>
             {{/wizard.state.tableInternalId2googleTableId}}
         </ul>
-
-        <ul>
+        <h3>SKU Map Previews</h3>
+        <ul class='skus'>
         {{#wizard.state.skus2ids}}
             <li>
                 <a target='_new' href='preview-map.html?sku={{sku}};tableId={{id}}'>

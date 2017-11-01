@@ -256,8 +256,8 @@ sub load_geo_sku_from_csv {
 	open my $IN, "<:encoding(utf8)", $args->{path}
 		or LOGDIE "$! - $args->{path}";
 
-	DEBUG 'Reading uploaded CSV, ', $args->{path};
-
+	INFO 'Reading uploaded CSV, ', $args->{path};
+	INFO 'Will log every 1,000 rows....';
 
 	my $csv_input = Text::CSV_XS->new({
 		sep_char 	=> $args->{separator},
@@ -289,9 +289,9 @@ sub load_geo_sku_from_csv {
 			$count ++;
 		}
 
-		if ($count % 100 == 0) {
+		if ($count % 1000 == 0) {
 			$self->{dbh}->commit();
-			INFO "Processed $count rows from the uploaded CSV file."
+			INFO "Processed $count rows from the uploaded CSV file.";
 		}
 	}
 
