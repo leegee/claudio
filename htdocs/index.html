@@ -141,6 +141,12 @@
                     id: json.tableInternalId2googleTableId[ json.sku2tableInternalId[sku] ]
                 });
             }
+            var ids = {};
+            for (var id in json.tableInternalId2googleTableId) {
+                var googleTableId = json.tableInternalId2googleTableId[id];
+                ids[googleTableId] ++;
+            }
+            this.state.tableInternalId2googleTableId = Object.keys(ids).sort();
             console.log('Leave pageReviewSpecificIndexBeforeRender with ', this.state.skus2ids)
         }
 
@@ -412,7 +418,18 @@
     </script>
 
     <script type='text/mustache' data-page-name='review-specific-index'>
-        <h2>Preview Maps</h2>
+        <h2>Publish Maps</h2>
+        <p>Maps need to be published by hand before they can be previewed. This will not effect the website's maps.</p>
+        <p>
+            Follow each link, select <kbd>File</kbd> &gt; <kbd>Share</kbd> &gt; <q>Private (change)</q> &gt;
+            <q>On - anyone with the link can view</q>.
+        </p>
+        <ul>
+            {{#wizard.state.tableInternalId2googleTableId}}
+                <li><a target='_new' href='https://fusiontables.google.com/DataSource?docid={{.}}'>{{.}}</a></li>
+            {{/wizard.state.tableInternalId2googleTableId}}
+        </ul>
+
         <ul>
         {{#wizard.state.skus2ids}}
             <li>

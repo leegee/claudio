@@ -289,10 +289,14 @@ sub load_geo_sku_from_csv {
 			$count ++;
 		}
 
-		INFO "Processed $count rows from the uploaded CSV file." if $count % 100 == 0;
+		if ($count % 100 == 0) {
+			$self->{dbh}->commit();
+			INFO "Processed $count rows from the uploaded CSV file."
+		}
 	}
 
-	DEBUG 'Done reading CSV.';
+	$self->{dbh}->commit();
+	DEBUG "Done reading CSV: $count records inserted.";
 	close $IN;
 	return $count;
 }
@@ -305,7 +309,10 @@ sub get_dir_from_path {
 
 sub get_dbh {
 	my ($self, $wipe) = @_;
-	$self->{dbh} = DBI->connect("dbi:SQLite:dbname=$CONFIG->{db_path}","","");
+	$self->{dbh} = DBI->connect("dbi:SQLite:dbname=$CONFIG->{db_path}","","", {
+		RaiseError => 1,
+		AutoCommit => 0
+	}) or LOGCONFESS $DBI::errstr;
 
 	# Check for our table:
 	my $sth = $self->{dbh}->table_info();
@@ -329,6 +336,7 @@ sub get_dbh {
 			)"
 		){
 			$self->{dbh}->do($statement);
+			$self->{dbh}->commit();
 		}
 		$self->{created_db} = 1;
 	}
@@ -475,6 +483,8 @@ sub _update_skus_merged_table_id {
 			$sku
 		);
 	}
+
+	$self->{dbh}->commit();
 }
 
 sub add_count {
