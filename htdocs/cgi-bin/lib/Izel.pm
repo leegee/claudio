@@ -527,7 +527,7 @@ sub _create_table_on_google {
 		]
 	};
 
-	DEBUG "Posting '$self->{name}' to ", $CONFIG->{endpoints}->{_create_table_on_google};
+	INFO "Posting '$self->{name}' to ", $CONFIG->{endpoints}->{_create_table_on_google};
 	my $res = $self->_post_blob( $CONFIG->{endpoints}->{_create_table_on_google}, $table );
 	LOGCONFESS 'No content.tableId from Google? Res='.(Dumper $res) if not $res->{content}->{tableId};
 	$self->{table_id} = $res->{tableId} = $res->{content}->{tableId};
@@ -608,7 +608,7 @@ sub upload_csv_rows {
 
 sub get_geoid2s_for_sku {
 	my ($self, $sku) = @_;
-	TRACE 'Enter for SKU ', $sku;
+	TRACE 'Enter get_geoid2s_for_sku for SKU ', $sku;
 	LOGCONFESS 'No SKU' if not $sku;
 	$self->{sth}->{get_geoid2s_for_sku} ||= $self->{dbh}->prepare_cached(
 		"SELECT GEO_ID2 FROM $CONFIG->{geosku_table_name} WHERE sku = ?"
@@ -626,7 +626,7 @@ sub get_geoid2s_for_sku {
 # https://developers.google.com/fusiontables/docs/v2/sql-reference
 # https://developers.google.com/fusiontables/docs/v2/using#insertRow
 sub _populate_table_on_google {
-	TRACE 'Enter';
+	TRACE 'Enter _populate_table_on_google';
 	my $self = shift;
 	$self->require_defined_fields(qw/ table_id count skus /);
 
@@ -648,7 +648,7 @@ sub _populate_table_on_google {
 	}
 	TRACE 'Call final insert';
 	push @res, $self->_execute_gsql($gsql);
-	DEBUG 'Inserted all rows';
+	DEBUG 'Inserted all rows, leaving _populate_table_on_google';
 	TRACE Dumper \@res;
 	return @res;
 }
