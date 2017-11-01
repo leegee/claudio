@@ -114,11 +114,12 @@
                     logwindow.scrollTop = logwindow.scrollHeight + logwindow.clientHeight;
                 }
             ;
-            logwindow.setAttribute('style', 'position:relative;overflow:auto;height:20em');
+            logwindow.setAttribute('style', 'position:relative;overflow:auto;height:20em;font-family: monospace; white-space: pre;');
 
             data.append('skus-text', this.state.skusToProcess);
             data.append('skus-file', this.state.file);
             data.append('index_js_dir', this.state.indexJsDir);
+            data.append('recreate_db', 1);
 
             request.onreadystatechange = () => {
                 if (request.responseText.length) {

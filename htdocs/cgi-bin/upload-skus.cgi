@@ -20,7 +20,7 @@ $|++;
 # });
 
 Log::Log4perl->init(\'
-    log4perl.logger = TRACE, IzelApp
+    log4perl.logger = INFO, IzelApp
     log4perl.appender.IzelApp = HtmlRealTime
     log4perl.appender.IzelApp.layout = PatternLayout
     log4perl.appender.IzelApp.layout.ConversionPattern = %d %m %n
@@ -40,6 +40,7 @@ if (@missing) {
 }
 
 Izel::upload_skus(
+    recreate_db         => $cgi->param('recreate_db'),
     skus_file_handle    => $IN,
     auth_string         => $ENV{QUERY_STRING},
     skus_text           => $cgi->param('skus-text'),

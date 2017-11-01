@@ -1,4 +1,3 @@
-use strict;
 use warnings;
 
 # See https://developers.google.com/fusiontables/docs/v2/using#ImportingRowsIntoTables
@@ -29,7 +28,7 @@ require  Text::CSV_XS;
 
 my $DEFAULT_US_COUNTIES_TABLE_ID = '1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV';
 my $TOTAL_COUNTIES_IN_USA = 3_007;
-my $FUSION_TABLE_LIMIT = 100_000;
+my $FUSION_TABLE_LIMIT = 10_000; # 100_000
 
 our $CONFIG = {
 	geosku_table_name	=> 'geosku',
@@ -320,6 +319,11 @@ sub _connect {
 	my $pass = 'admin';
 
 	$self->{dbh} = DBI->connect("DBI:mysql:", $user, $pass);
+
+	if ($self->{recreate_db}) {
+		$self->{dbh}->do("DROP DATABASE IF EXISTS $dbname") or LOGDIE "Cannot create database geosku"; # XXX
+	}
+
 	$self->{dbh}->do("CREATE DATABASE IF NOT EXISTS $dbname") or LOGDIE "Cannot create database geosku";
 
 	$self->{dbh} = DBI->connect($dsn, $user, $pass, {
@@ -334,22 +338,24 @@ sub get_dbh {
 	$self->_connect;
 	# Check for our table:
 
-	foreach my $statement (
-		"DROP TABLE IF EXISTS $CONFIG->{index_table_name}",
-		"CREATE TABLE IF NOT EXISTS $CONFIG->{index_table_name} (
-			id INTEGER AUTO_INCREMENT PRIMARY KEY,
-			url VARCHAR(255)
-		)",
-		"DROP TABLE IF EXISTS $CONFIG->{geosku_table_name}",
-		"CREATE TABLE IF NOT EXISTS $CONFIG->{geosku_table_name} (
-			geo_id2			BLOB,
-			sku				VARCHAR(10),
-			merged_table_id INTEGER
-			# FOREIGN KEY(merged_table_id) REFERENCES $CONFIG->{index_table_name}(merged_table_id)
-		)"
-	){
-		$self->{dbh}->do($statement);
-		$self->{dbh}->commit();
+	if ($self->{recreate_db}) {
+		foreach my $statement (
+			"DROP TABLE IF EXISTS $CONFIG->{index_table_name}",
+			"CREATE TABLE IF NOT EXISTS $CONFIG->{index_table_name} (
+				id INTEGER AUTO_INCREMENT PRIMARY KEY,
+				url VARCHAR(255)
+			)",
+			"DROP TABLE IF EXISTS $CONFIG->{geosku_table_name}",
+			"CREATE TABLE IF NOT EXISTS $CONFIG->{geosku_table_name} (
+				geo_id2			BLOB,
+				sku				VARCHAR(10),
+				merged_table_id INTEGER
+				# FOREIGN KEY(merged_table_id) REFERENCES $CONFIG->{index_table_name}(merged_table_id)
+			)"
+		){
+			$self->{dbh}->do($statement);
+			$self->{dbh}->commit();
+		}
 	}
 }
 
@@ -369,6 +375,7 @@ sub get_initials {
 	];
 }
 
+# 10,000 rows per table for queries
 sub compute_fusion_tables {
 	my $self = shift;
 	Izel::Table->RESET;
@@ -399,6 +406,19 @@ sub compute_fusion_tables {
 	}
 
 	return $tables;
+}
+
+sub skus_not_uploaded {
+	my $self = shift;
+	$self->{sth}->{skus_not_uploaded} ||= $self->{dbh}->prepare("
+		SELECT sku FROM $CONFIG->{geosku_table_name}
+		WHERE merged_table_id IS NULL
+	");
+	return map {$_->[0]} @{
+		$self->{dbh}->selectall_arrayref(
+			$self->{sth}->{skus_not_uploaded}
+		)
+	};
 }
 
 1;
@@ -470,6 +490,7 @@ sub create {
 
 sub _update_skus_merged_table_id {
 	my $self = shift;
+	TRACE 'Enter _update_skus_merged_table_id';
 	$self->require_defined_fields('skus', 'merged_table_google_id');
 
 	$self->{sth}->{create_merged_table_id} ||= $self->{dbh}->prepare_cached("
@@ -492,6 +513,7 @@ sub _update_skus_merged_table_id {
 	}
 
 	$self->{dbh}->commit();
+	TRACE 'Leave _update_skus_merged_table_id';
 }
 
 sub add_count {
@@ -531,7 +553,7 @@ sub _create_table_on_google {
 	my $res = $self->_post_blob( $CONFIG->{endpoints}->{_create_table_on_google}, $table );
 	LOGCONFESS 'No content.tableId from Google? Res='.(Dumper $res) if not $res->{content}->{tableId};
 	$self->{table_id} = $res->{tableId} = $res->{content}->{tableId};
-	INFO "Created table ID ", $self->{table_id};
+	INFO "Created empty table ID ", $self->{table_id}, ' ', $self->{name};
 	TRACE Dumper $res;
 	return $res;
 }
@@ -585,11 +607,11 @@ sub _post_blob {
 		INFO 'OK';
 		# $res->{content} = $self->{jsoner}->decode( $response->decoded_content ),
 	} else {
-		INFO 'Response: ', $response->status_line;
+		ERROR 'Response: ', $response->status_line;
 		$res->{error} = $response->status_line;
 	}
 
-	TRACE '_post_blob return: ', Dumper $res;
+	TRACE 'Leave _post_blob';
 	return $res;
 }
 
@@ -626,8 +648,8 @@ sub get_geoid2s_for_sku {
 # https://developers.google.com/fusiontables/docs/v2/sql-reference
 # https://developers.google.com/fusiontables/docs/v2/using#insertRow
 sub _populate_table_on_google {
-	TRACE 'Enter _populate_table_on_google';
 	my $self = shift;
+	TRACE 'Enter _populate_table_on_google for '. $self->{name};
 	$self->require_defined_fields(qw/ table_id count skus /);
 
 	my $statements = 0;	# Up to 500 INSERTs
@@ -648,7 +670,7 @@ sub _populate_table_on_google {
 	}
 	TRACE 'Call final insert';
 	push @res, $self->_execute_gsql($gsql);
-	DEBUG 'Inserted all rows, leaving _populate_table_on_google';
+	DEBUG "Inserted all rows,\nleaving _populate_table_on_google for $self->{name}";
 	TRACE Dumper \@res;
 	return @res;
 }
@@ -664,9 +686,9 @@ sub _execute_gsql {
 
 # https://developers.google.com/fusiontables/docs/v2/sql-reference#createView
 sub _create_merge {
-	TRACE 'Enter';
 	my $self = shift;
 	$self->set_name_from_skus('Merged');
+	TRACE "Create merge table $self->{name}";
 	my $new_table_name = $self->{name};
 	my $gsql = "CREATE VIEW '$new_table_name' AS (
 		SELECT * FROM $self->{table_id} AS Skus
@@ -677,7 +699,7 @@ sub _create_merge {
 	my $res = $self->_execute_gsql($gsql);
 	if ($res->{content} and $res->{content}->{rows}) {
 		$self->{merged_table_google_id} = $res->{content}->{rows}->[0]->[0];
-		INFO "Created merged table.";
+		INFO "Created merged table ".$self->{name};
 	} else {
 		LOGCONFESS 'Unexpected response to gsql:', $gsql, "\nResponse:", Dumper $res;
 	}
