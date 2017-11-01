@@ -13,3 +13,5 @@ izelplants-fusion-tables
 reports/
 temp/
 *.old
+latest_skus.csv
+data/
