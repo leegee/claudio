@@ -251,13 +251,15 @@ sub load_geo_sku_from_csv {
 		delete $args->{include_only_skus};
 	}
 	$args->{separator} ||= ',';
+	$args->{commit_every} ||= 10_000;
+
 	my $count = 0;
 
 	open my $IN, "<:encoding(utf8)", $args->{path}
 		or LOGDIE "$! - $args->{path}";
 
 	INFO 'Reading uploaded CSV, ', $args->{path};
-	INFO 'Will log every 1,000 rows....';
+	INFO "Will log every $args->{commit_every} rows....";
 
 	my $csv_input = Text::CSV_XS->new({
 		sep_char 	=> $args->{separator},
@@ -289,7 +291,7 @@ sub load_geo_sku_from_csv {
 			$count ++;
 		}
 
-		if ($count % 1000 == 0) {
+		if ($count % $args->{commit_every} == 0) {
 			$self->{dbh}->commit();
 			INFO "Processed $count rows from the uploaded CSV file.";
 		}
@@ -307,42 +309,47 @@ sub get_dir_from_path {
 	return $dir;
 }
 
-sub get_dbh {
-	my ($self, $wipe) = @_;
-	$self->{dbh} = DBI->connect("dbi:SQLite:dbname=$CONFIG->{db_path}","","", {
+sub _connect {
+	my $self = shift;
+	TRACE 'Enter _connect';
+
+	# my $dsn = "dbi:SQLite:dbname=$CONFIG->{db_path}"; my $user = ''; my $pass = '';
+	my $dbname = 'geosku';
+	my $dsn = "dbi:mysql:dbname=$dbname";
+	my $user = 'root';
+	my $pass = 'admin';
+
+	$self->{dbh} = DBI->connect("DBI:mysql:", $user, $pass);
+	$self->{dbh}->do("CREATE DATABASE IF NOT EXISTS $dbname") or LOGDIE "Cannot create database geosku";
+
+	$self->{dbh} = DBI->connect($dsn, $user, $pass, {
 		RaiseError => 1,
 		AutoCommit => 0
 	}) or LOGCONFESS $DBI::errstr;
+	TRACE 'Leave _connect';
+}
 
+sub get_dbh {
+	my ($self, $wipe) = @_;
+	$self->_connect;
 	# Check for our table:
-	my $sth = $self->{dbh}->table_info();
-	my @tables = $self->{dbh}->selectall_array($sth);
 
-	# If the scheme does not exist, create it:
-	# warn Dumper grep { warn 'xxxxxx',$_->[2];$_->[2] eq $CONFIG->{geosku_table_name}  } @tables;
-	if ($wipe or not grep { $_->[2] eq $CONFIG->{geosku_table_name}  } @tables ) {
-		foreach my $statement (
-			"DROP TABLE IF EXISTS $CONFIG->{index_table_name}",
-			"CREATE TABLE $CONFIG->{index_table_name} (
-				id INTEGER PRIMARY KEY,
-				url VARCHAR(255)
-			)",
-			"DROP TABLE IF EXISTS $CONFIG->{geosku_table_name}",
-			"CREATE TABLE $CONFIG->{geosku_table_name} (
-				geo_id2			BLOB,
-				sku				VARCHAR(10),
-				merged_table_id INTEGER,
-				FOREIGN KEY(merged_table_id) REFERENCES $CONFIG->{index_table_name}(merged_table_id)
-			)"
-		){
-			$self->{dbh}->do($statement);
-			$self->{dbh}->commit();
-		}
-		$self->{created_db} = 1;
-	}
-
-	else {
-		$self->{created_db} = 0;
+	foreach my $statement (
+		"DROP TABLE IF EXISTS $CONFIG->{index_table_name}",
+		"CREATE TABLE IF NOT EXISTS $CONFIG->{index_table_name} (
+			id INTEGER AUTO_INCREMENT PRIMARY KEY,
+			url VARCHAR(255)
+		)",
+		"DROP TABLE IF EXISTS $CONFIG->{geosku_table_name}",
+		"CREATE TABLE IF NOT EXISTS $CONFIG->{geosku_table_name} (
+			geo_id2			BLOB,
+			sku				VARCHAR(10),
+			merged_table_id INTEGER
+			# FOREIGN KEY(merged_table_id) REFERENCES $CONFIG->{index_table_name}(merged_table_id)
+		)"
+	){
+		$self->{dbh}->do($statement);
+		$self->{dbh}->commit();
 	}
 }
 
