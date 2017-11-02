@@ -74,7 +74,7 @@ subtest 'DB scheme init' => sub {
     ok -e $Izel::CONFIG->{db_path}, 'DB file created';
 };
 
-is $izel->load_geo_sku_from_csv( path => 'data/small.csv'), 18, 'import';
+is $izel->ingest_sku_from_csv( path => 'data/small.csv'), 18, 'import';
 
 is_deeply $izel->get_initials(), ['A', 'S'], 'Initials';
 
@@ -138,7 +138,7 @@ subtest 'create_fusion_tables' => sub {
     subtest 'Table::create' => sub {
         foreach my $table (@$tables) {
             isa_ok $table, 'Izel::Table';
-            $table->create();
+            $table-create_from_csv();
         }
     };
 

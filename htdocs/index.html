@@ -116,10 +116,44 @@
             ;
             logwindow.setAttribute('style', 'position:relative;overflow:auto;height:20em;font-family: monospace; white-space: pre;');
 
+            data.append('action', 'upload-skus');
             data.append('skus-text', this.state.skusToProcess);
             data.append('skus-file', this.state.file);
             data.append('index_js_dir', this.state.indexJsDir);
             data.append('recreate_db', 1);
+
+            request.onreadystatechange = () => {
+                if (request.responseText.length) {
+                    show(request.responseText);
+                }
+                if (request.readyState === XMLHttpRequest.DONE) {
+                    console.log('CGI processing and Google processing complete.');
+                    window.wizard.nextPage('review-specific-index', this.state.indexJsDir);
+                    return Promise.resolve();
+                } else {
+                    console.error('Not ready', request.readyState, request.responseText);
+                }
+            }
+            request.open('POST', Config.endpoints.uploadSkus + '?' + authString(this.state.access_token));
+            request.send(data);
+        }
+
+        var pageResumePreviousAfterRender = async function () {
+            console.log('Enter resume previous job');
+            var buffer = '',
+                data = new FormData(),
+                logwindow = document.getElementById('logWindow'),
+                request = new XMLHttpRequest(),
+                show = (html) => {
+                    logwindow.innerHTML = html;
+                    logwindow.scrollTop = logwindow.scrollHeight + logwindow.clientHeight;
+                }
+            ;
+            logwindow.setAttribute('style', 'position:relative;overflow:auto;height:20em;font-family: monospace; white-space: pre;');
+
+            data.append('action', 'resume-previous');
+            data.append('index_js_dir', this.state.indexJsDir);
+            data.append('recreate_db', 0);
 
             request.onreadystatechange = () => {
                 if (request.responseText.length) {
@@ -374,7 +408,8 @@
             the map pages.
         </p>
         <ul>
-            <li data-goto-page='select-skus'>Uupload SKU geography</lia>
+            <li data-goto-page='select-skus'>Rebuild - uupload SKU geography</lia>
+                <li data-goto-page='resume-previous'>Resume the last job</lia>
             <li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li>
         </ul>
     </script>
@@ -417,6 +452,11 @@
     <script type='text/mustache' data-page-name='upload-skus'>
         <h2>Creating maps... </h2>
         <div id='logWindow'></div>
+    </script>
+
+    <script type='text/mustache' data-page-name='resume-previouss'>
+        <h2>Creating Maps</h2>
+        <div id='logWindow'><p>Resuming the previous job.</p></div>
     </script>
 
     <script type='text/mustache' data-page-name='review-indexes'>

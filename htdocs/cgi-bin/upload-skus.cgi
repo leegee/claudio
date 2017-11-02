@@ -32,20 +32,34 @@ $CGI::DISABLE_UPLOADS = 0;
 LOGDIE 'No $ENV{DOCUMENT_ROOT} !!!' if not $ENV{DOCUMENT_ROOT};
 
 my $cgi = CGI->new;
-my @missing = grep {! $cgi->param($_) } qw/ skus-file index_js_dir /;
-my $IN  = $cgi->upload('skus-file');
-push(@missing, '(skus-file is not a filehandle)') if not defined $IN;
-if (@missing) {
-    LOGDIE 'Missing params: ', join ', ', @missing;
+my @missing = grep {! $cgi->param($_) } qw/ skus-file index_js_dir action /;
+
+if ($cgi->param('action') eq 'upload-skus'){
+    my $IN  = $cgi->upload('skus-file');
+    push(@missing, '(skus-file is not a filehandle)') if not defined $IN;
+    if (@missing) {
+        LOGDIE 'Missing params: ', join ', ', @missing;
+    }
 }
 
-Izel::upload_skus(
-    recreate_db         => $cgi->param('recreate_db'),
-    skus_file_handle    => $IN,
-    auth_string         => $ENV{QUERY_STRING},
-    skus_text           => $cgi->param('skus-text'),
-    output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
-);
+# resume-previous
+
+if ($cgi->param('action') eq 'upload-skus'){
+    Izel::upload_skus(
+        recreate_db         => $cgi->param('recreate_db'),
+        skus_file_handle    => $IN,
+        auth_string         => $ENV{QUERY_STRING},
+        skus_text           => $cgi->param('skus-text'),
+        output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
+    );
+} elsif $cgi->param('actin') eq 'resume-previous') {
+    Izel->new(
+        output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
+        auth_string         => $ENV{QUERY_STRING},
+    )
+} else {
+    LOGDIE 'Unknown Action';
+}
 
 exit;
 

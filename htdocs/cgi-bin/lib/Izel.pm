@@ -83,13 +83,15 @@ sub upload_skus {
 
     my $jsonRes = Izel->new(
         auth_string          => $args->{auth_string},
-    )->create(
+		output_dir	    	 => $args->{output_dir},
+    )->create_from_csv(
         skus2fips_csv_path   => $uploaded_sku_csv_path,
-        output_dir	    	 => $args->{output_dir},
         include_only_skus    => $args->{skus_text}
     );
 
-    TRACE 'Done upload_skus';
+    TRACE 'Done
+
+	';
     return $jsonRes;
 }
 
@@ -114,7 +116,7 @@ sub new {
 	return bless $self, ref($inv) ? ref($inv) : $inv;
 }
 
-=head2 create
+=head2 create_from_csv
 
 Creates multiple CSVs and a JSON index of which SKU is in
 which CSV, because Fusion Tables only imports small CSVs at
@@ -143,41 +145,28 @@ Directory.
 
 =cut
 
-sub create {
+sub create_from_csv {
 	TRACE "Enter Izel::create";
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
 
-	if ($args->{include_only_skus}){
-		$args->{include_only_skus} = { map { $_ => 1 } @{$args->{include_only_skus}} }
-	}
-	$args->{separator} ||= ',';
-
 	$self->get_dbh;
 
-	my $fh_index = -1;
-	my @paths;
-	my @table_ids,
-	my $initials_count = {};
-
-	$self->load_geo_sku_from_csv(
+	$self->ingest_sku_from_csv(
 		path				=> $args->{skus2fips_csv_path},
 		separator			=> $args->{separator},
 		include_only_skus	=> $args->{include_only_skus},
 	);
 
-	$self->{output_dir} = $args->{output_dir};
+	return $self->create_from_db();
+}
 
-	if (!-d $self->{output_dir}) {
-		File::Path::make_path( $self->{output_dir} ) or die "$! - $self->{output_dir}";
-		INFO 'Created output_dir, ' . $self->{output_dir};
-	}
-
-	$self->create_htaccess;
+sub create_from_db {
+	my $self = shift;
+	my @merged_table_google_ids;
 
 	my $tables = $self->compute_fusion_tables;
 
-	my @merged_table_google_ids;
 	foreach my $table (@$tables) {
 		$table->create();
 		push @merged_table_google_ids, $table->{merged_table_google_id};
@@ -198,6 +187,11 @@ sub create_htaccess {
 
 sub create_index_file {
 	my ($self, @merged_table_google_ids) = @_;
+	if (!-d $self->{output_dir}) {
+		File::Path::make_path( $self->{output_dir} ) or die "$! - $self->{output_dir}";
+		INFO 'Created output_dir, ' . $self->{output_dir};
+	}
+	$self->create_htaccess;
 	my $json = $self->_compose_index_file(@merged_table_google_ids);
 	return $self->_write_index_file($json);
 }
@@ -240,15 +234,20 @@ sub _write_index_file {
 	return $json;
 }
 
-sub load_geo_sku_from_csv {
+sub ingest_sku_from_csv {
 	TRACE 'Load GEO/SKU from CSV';
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
-	if ($args->{include_only_skus} and ref $args->{include_only_skus} eq 'HASH'
-		and (not scalar keys %{ $args->{include_only_skus} })
+
+	if ($args->{include_only_skus}
+		and ref $args->{include_only_skus}
+		and ref $args->{include_only_skus} eq 'ARRAY'
 	) {
+		$args->{include_only_skus} = { map { $_ => 1 } @{$args->{include_only_skus}} }
+	} else {
 		delete $args->{include_only_skus};
 	}
+
 	$args->{separator} ||= ',';
 	$args->{commit_every} ||= 10_000;
 
@@ -375,14 +374,19 @@ sub get_initials {
 	];
 }
 
-# 10,000 rows per table for queries
+# Because of https://developers.google.com/fusiontables/docs/v1/using#quota
 sub compute_fusion_tables {
+	INFO 'Enter compute_fusion_tables';
 	my $self = shift;
 	Izel::Table->RESET;
 	my $fusion_table_limit = shift || $FUSION_TABLE_LIMIT;
-	my $counts = $self->{dbh}->selectall_arrayref(
-		"SELECT COUNT(geo_id2) AS c, sku FROM $CONFIG->{geosku_table_name} GROUP BY sku ORDER BY c DESC"
-	);
+	my $counts = $self->{dbh}->selectall_arrayref("
+		SELECT COUNT(geo_id2) AS c, sku
+		FROM $CONFIG->{geosku_table_name}
+		WHERE merged_table_id IS NULL
+		GROUP BY sku
+		ORDER BY c DESC
+	");
 
 	my $table_args = {
 		map { $_ => $self->{$_} } qw/ auth_token auth_string output_dir jsoner dbh us_counties_table_id ua/
@@ -394,6 +398,8 @@ sub compute_fusion_tables {
 	my $table_index = 0;
 
 	foreach my $record (@$counts) {
+		# Max 10,000 rows per table for queries
+		# TODO add count of data size < 250 MB per tble, < 1 GB in total,
 		if ($tables->[$table_index]->{count} + $record->[0] > $fusion_table_limit) {
 			$tables->[$table_index]->create();
 			$table_index ++;
@@ -405,18 +411,29 @@ sub compute_fusion_tables {
 		);
 	}
 
+	INFO 'Leave compute_fusion_tables';
 	return $tables;
 }
 
-sub skus_not_uploaded {
+# Upload all skus without a merged_table_id;
+sub resume_previous {
 	my $self = shift;
-	$self->{sth}->{skus_not_uploaded} ||= $self->{dbh}->prepare("
+}
+
+sub get_skus_not_uploaded {
+	my $self = shift;
+	my $args = ref($_[0])? shift : {@_};
+	$args->{page_size} ||= 1000;
+	$self->{sth}->{get_skus_not_uploaded} ||= $self->{dbh}->prepare("
 		SELECT sku FROM $CONFIG->{geosku_table_name}
 		WHERE merged_table_id IS NULL
+		LIMIT ?
 	");
 	return map {$_->[0]} @{
 		$self->{dbh}->selectall_arrayref(
-			$self->{sth}->{skus_not_uploaded}
+			$self->{sth}->{get_skus_not_uploaded},
+			{},
+			$args->{page_size}
 		)
 	};
 }
