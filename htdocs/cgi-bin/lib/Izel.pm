@@ -113,7 +113,11 @@ sub new {
 		}
 	}
 
-	return bless $self, ref($inv) ? ref($inv) : $inv;
+	$self = bless $self, ref($inv) ? ref($inv) : $inv;
+
+	$self->get_dbh;
+
+	return $self;
 }
 
 =head2 create_from_csv
@@ -150,8 +154,6 @@ sub create_from_csv {
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
 
-	$self->get_dbh;
-
 	$self->ingest_sku_from_csv(
 		path				=> $args->{skus2fips_csv_path},
 		separator			=> $args->{separator},
@@ -165,7 +167,7 @@ sub create_from_db {
 	my $self = shift;
 	my @merged_table_google_ids;
 
-	my $tables = $self->compute_fusion_tables;
+	my $tables = $self->create_fusion_tables;
 
 	foreach my $table (@$tables) {
 		$table->create();
@@ -184,6 +186,11 @@ sub create_htaccess {
 	TRACE 'Created ', $path;
 }
 
+sub preview_db {
+	my $self = shift;
+	return $self->_make_index_file_json();
+}
+
 
 sub create_index_file {
 	my ($self, @merged_table_google_ids) = @_;
@@ -192,14 +199,14 @@ sub create_index_file {
 		INFO 'Created output_dir, ' . $self->{output_dir};
 	}
 	$self->create_htaccess;
-	my $json = $self->_compose_index_file(@merged_table_google_ids);
+	my $json = $self->_make_index_file_json(@merged_table_google_ids);
 	return $self->_write_index_file($json);
 }
 
 
-sub _compose_index_file {
+sub _make_index_file_json {
 	my ($self, @merged_table_google_ids) = @_;
-    my @skus2table_ids = $self->{dbh}->selectall_array("
+	$self->{sth}->{all_skus2table_ids} = $self->{dbh}->prepare("
         SELECT DISTINCT
 		      $CONFIG->{geosku_table_name}.sku AS sku,
 		      $CONFIG->{index_table_name}.url AS googleTableId,
@@ -209,12 +216,25 @@ sub _compose_index_file {
 		   ON $CONFIG->{geosku_table_name}.merged_table_id = $CONFIG->{index_table_name}.id
     ");
 
-	my @tableInternalId2googleTableId = $self->{dbh}->selectall_array("
-        SELECT id, url FROM $CONFIG->{index_table_name}
-		WHERE url IN ("
-		. join(",", map {$self->{dbh}->quote($_)} @merged_table_google_ids)
-		. ")
-    ");
+    my @skus2table_ids = $self->{dbh}->selectall_array(
+		$self->{sth}->{all_skus2table_ids}
+	);
+
+	my @tableInternalId2googleTableId;
+
+	if (@merged_table_google_ids) {
+		@tableInternalId2googleTableId = $self->{dbh}->selectall_array("
+			SELECT id, url FROM $CONFIG->{index_table_name}
+			WHERE url IN ("
+			. join(",", map {$self->{dbh}->quote($_)} @merged_table_google_ids)
+			. ")
+		");
+	} else {
+		INFO 'Getting all URLs';
+		@tableInternalId2googleTableId = $self->{dbh}->selectall_array("
+			SELECT id, url FROM $CONFIG->{index_table_name}
+		");
+	}
 
 	my $json = $self->{jsoner}->encode({
 		sku2tableInternalId => { map { $_->[0] => $_->[2] } @skus2table_ids },
@@ -375,11 +395,12 @@ sub get_initials {
 }
 
 # Because of https://developers.google.com/fusiontables/docs/v1/using#quota
-sub compute_fusion_tables {
-	INFO 'Enter compute_fusion_tables';
+sub create_fusion_tables {
+	INFO 'Enter create_fusion_tables';
 	my $self = shift;
 	Izel::Table->RESET;
 	my $fusion_table_limit = shift || $FUSION_TABLE_LIMIT;
+	# Do this as bucket brigade
 	my $counts = $self->{dbh}->selectall_arrayref("
 		SELECT COUNT(geo_id2) AS c, sku
 		FROM $CONFIG->{geosku_table_name}
@@ -411,13 +432,14 @@ sub compute_fusion_tables {
 		);
 	}
 
-	INFO 'Leave compute_fusion_tables';
+	INFO 'Leave create_fusion_tables';
 	return $tables;
 }
 
 # Upload all skus without a merged_table_id;
 sub resume_previous {
 	my $self = shift;
+	return $self->create_from_db();
 }
 
 sub get_skus_not_uploaded {
@@ -509,11 +531,11 @@ sub _update_skus_merged_table_id {
 	my $self = shift;
 	TRACE 'Enter _update_skus_merged_table_id';
 	$self->require_defined_fields('skus', 'merged_table_google_id');
-
+die 123;
 	$self->{sth}->{create_merged_table_id} ||= $self->{dbh}->prepare_cached("
 		INSERT INTO $CONFIG->{index_table_name} (url) VALUES (?)
 	");
-	$self->{sth}->{create_merged_table_id}->execute($self->{merged_table_google_id});
+	$self->{sth}->{create_merged_table_id}->execute( $self->{merged_table_google_id} );
 	$self->{merged_table_id} = $self->{dbh}->last_insert_id( undef, undef, $CONFIG->{index_table_name}, undef );
 
 	$self->{sth}->{update_skus_merged_table_id} ||= $self->{dbh}->prepare_cached("

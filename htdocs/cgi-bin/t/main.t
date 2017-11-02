@@ -95,9 +95,9 @@ sub test_table_obj {
     return @_;
 }
 
-subtest 'compute_fusion_tables' => sub {
+subtest 'create_fusion_tables' => sub {
     subtest 'massive limit, tiny data: one table' => sub {
-        @_ = @{ $izel->compute_fusion_tables };
+        @_ = @{ $izel->create_fusion_tables };
         @_ = test_table_obj(@_);
         is_deeply $_[0]->{skus}, ['ARTHR', 'SCSC'], 'skus';
         is $_[0]->{count}, 18, 'count';
@@ -106,7 +106,7 @@ subtest 'compute_fusion_tables' => sub {
     };
 
     subtest 'force two tables' => sub {
-        @_ = @{ $izel->compute_fusion_tables(14) };
+        @_ = @{ $izel->create_fusion_tables(14) };
         @_ = test_table_obj(@_);
         is_deeply $_[0]->{skus}, ['ARTHR'], 'skus';
         is $_[0]->{count}, 14, 'count';
@@ -132,7 +132,7 @@ subtest 'compute_fusion_tables' => sub {
 # };
 
 subtest 'create_fusion_tables' => sub {
-    my $tables = $izel->compute_fusion_tables;
+    my $tables = $izel->create_fusion_tables;
     isa_ok $tables, 'ARRAY', 'rv';
 
     subtest 'Table::create' => sub {
@@ -148,7 +148,7 @@ subtest 'create_fusion_tables' => sub {
             push @merged_table_google_ids, $table->{merged_table_google_id};
         }
 
-        my $json = JSON::Any->jsonToObj( $izel->_compose_index_file(@merged_table_google_ids) );
+        my $json = JSON::Any->jsonToObj( $izel->_make_index_file_json(@merged_table_google_ids) );
         is_deeply $json, {
             tableInternalId2googleTableId => {
                 '1' => $MOCK_TABLE_ID,

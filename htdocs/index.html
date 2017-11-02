@@ -12,7 +12,8 @@
 
     <link rel="stylesheet" href="css/normalize.css">
     <link rel="stylesheet" href="css/main.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/2.3.0/mustache.min.js"></script>
+    <!-- script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/2.3.0/mustache.min.js"></script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.0.11/handlebars.min.js"></script>
 
     <meta name="google-signin-client_id" content="837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com">
 
@@ -169,22 +170,18 @@
             }
             request.open('POST', Config.endpoints.uploadSkus + '?' + authString(this.state.access_token));
             request.send(data);
-        }
+        };
 
-        var pageReviewSpecificIndexBeforeRender = async function (e) {
-            if (e instanceof Array) {
-                e = e[0]
-            }
-            console.log('xxxx', e);
-            if (typeof e === 'string') {
-                this.state.jobName = e;
-            } else {
-                // Called by click event
-                this.state.jobName = ('/' + this.state.indexBaseDir + '/' + e.target.innerText).replace(/\/+/g, '/');
-            }
-            var url = (this.state.jobName + '/index.js').replace(/\/+/g, '/');
-            var response = await window.fetch(url);
+        var pagePreviewDbBeforeRender = async function () {
+            console.log('Load ', Config.endpoints.previewDb);
+            var response = await window.fetch(
+                Config.endpoints.previewDb
+            );
             var json = await response.json();
+            this.callMethod(viewIndex, json);
+        };
+
+        var viewIndex = function (json) {
             this.state.skus2ids = [];
             for (var sku in json.sku2tableInternalId) {
                 this.state.skus2ids.push({
@@ -198,6 +195,22 @@
                 ids[googleTableId] ++;
             }
             this.state.tableInternalId2googleTableId = Object.keys(ids).sort();
+        };
+
+        var pageReviewSpecificIndexBeforeRender = async function (e) {
+            if (e instanceof Array) {
+                e = e[0]
+            }
+            if (typeof e === 'string') {
+                this.state.jobName = e;
+            } else {
+                // Called by click event
+                this.state.jobName = ('/' + this.state.indexBaseDir + '/' + e.target.innerText).replace(/\/+/g, '/');
+            }
+            var url = (this.state.jobName + '/index.js').replace(/\/+/g, '/');
+            var response = await window.fetch(url);
+            var json = await response.json();
+            this.callMethod(viewIndex, json);
             console.log('Leave pageReviewSpecificIndexBeforeRender with ', this.state.skus2ids)
         }
 
@@ -224,11 +237,11 @@
         }
 
         /**
-         * Pages are `script` elements of `type` `text/mustache`,
+         * Pages are `script` elements of `type` `text/handlebars`,
          *  with a `data-page-name` attribute.
          *
          * @example
-         *  <script type=<script type='text/mustache' data-page-name='manual-auth'> ...
+         *  <script type=<script type='text/handlebars' data-page-name='manual-auth'> ...
          *
          * Pages are displayed via `Wizard.nextPage(:pageName)`.
          *
@@ -247,7 +260,7 @@
          * of the ant-cased page name, prefixed with the word 'page'.
          *
          * @example
-         *  <script type=<script type='text/mustache' data-page-name='manual-auth'> ...
+         *  <script type=<script type='text/handlebars' data-page-name='manual-auth'> ...
          *  function pageManualAuth () { ...
          *
          * After a page is displayed, the Wizard will try to call a function with the same name, and the
@@ -277,13 +290,23 @@
                 main: document.getElementById('main'),
                 ctrlNext: document.getElementById('ctrl-next'),
                 ctrlBack: document.getElementById('ctrl-back'),
-                ctrlCancel: document.getElementById('ctrl-cancel')
+                ctrlCancel: document.getElementById('ctrl-cancel'),
+                spinner: document.getElementById('spinner'),
             };
+            this.hideSpinner();
             this.el.main.setAttribute('style', 'display:block"');
             window.popstate = (e) => {
                 console.log('POPSTATE ', e);
                 return false;  //pushstate
             };
+        }
+
+        Wizard.prototype.callMethod = function (method, ...args) {
+            console.log('callMethod ', method, args);
+            if (typeof method === 'string') {
+                method = window[method];
+            }
+            return method.apply(this, args);
         }
 
         /**
@@ -309,7 +332,7 @@
                 console.log('Got next-page pageName from data-next-page: ', pageName);
             }
 
-            this.pageEl = document.querySelector('script[type="text/mustache"][data-page-name="' + pageName + '"]');
+            this.pageEl = document.querySelector('script[type="text/handlebars"][data-page-name="' + pageName + '"]');
             if (! this.pageEl) {
                 this.el.main.innerHTML = '<h2>Error</h2><p>Could not find the requested page, ' + pageName + '</p>';
                 return;
@@ -366,11 +389,30 @@
             }
         };
 
+        Handlebars.registerHelper('wizardIncludeTemplate', function(templateId) {
+            var html = Handlebars.compile(
+                document.getElementById(templateId).innerHTML.toString()
+            )(
+                { wizard: this.wizard }
+            );
+            return new Handlebars.SafeString(html);
+        });
+
+        // Wizard.prototype.includeTemplate = function () {
+        //     console.log('-------', this);
+        // }
+
         Wizard.prototype.render = function () {
             console.log('Enter render');
             try {
-                this.el.main.innerHTML = Mustache.render(
-                    this.pageEl.innerHTML.toString(),
+                // this.el.main.innerHTML = handlebars.render(
+                //     this.pageEl.innerHTML.toString(),
+                //     { wizard: this }
+                // );
+                // No caching:
+                this.el.main.innerHTML = Handlebars.compile(
+                    this.pageEl.innerHTML.toString()
+                )(
                     { wizard: this }
                 );
                 var links = document.querySelectorAll('[data-goto-page]');
@@ -379,13 +421,23 @@
                         el.getAttribute('style') + ';cursor:pointer;'
                     );
                     el.onclick = (e) => {
+                        this.showSpinner();
                         this.nextPage(e.target.dataset.gotoPage, e);
+                        this.hideSpinner();
                     };
                 };
             } catch (e) {
                 console.error(e);
             }
         }
+
+        Wizard.prototype.showSpinner = function () {
+            this.el.spinner.style = 'display: block;';
+        };
+
+        Wizard.prototype.hideSpinner = function () {
+            this.el.spinner.style = 'display: none;';
+        };
 
         Wizard.prototype._antsToCamelCase = function (str) {
             return str.replace(/-(\w)/g, (_, initial) => {
@@ -395,30 +447,33 @@
 
     </script>
 
-    <script type='text/mustache' id='page-100' data-page-name='manual-auth'>
+    <script type='text/handlebars' id='page-100' data-page-name='manual-auth'>
         <p>
             <button id='authButton' name='authButton'>Log In</button>
         </p>
     </script>
 
-    <script type='text/mustache' data-page-name='intro'>
+    <script type='text/handlebars' data-page-name='intro'>
         <p>
             We have too much data to fit into a single Fusion table, so this
             app creates several tables and an index which is referenced by
             the map pages.
         </p>
         <ul>
-            <li data-goto-page='select-skus'>Rebuild - uupload SKU geography</lia>
-                <li data-goto-page='resume-previous'>Resume the last job</lia>
+            <li data-goto-page='select-skus'>Rebuild - upload new SKU geography for processing</lia>
+            <li data-goto-page='resume-previous'>Resume the last job</lia>
+            <li data-goto-page='preview-db'>Preview SKUs already uploaded to Google</li>
             <li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li>
         </ul>
     </script>
 
-    <script type='text/mustache'data-page-name='select-skus'>
+    <script type='text/handlebars'data-page-name='select-skus'>
         <h2>Upload SKU Geography</h2>
         <div id='enterSkusToProcess'>
             <p><label for='skusToProess'>Please enter a list of USDA symbols/SKUs to proceess. Separate mulitple values with spaces and/or commas.</p>
-            <ul><textarea id='skusToProcess' name='skusToProcess'></textarea>
+            <p>
+                <textarea id='skusToProcess' name='skusToProcess'></textarea>
+            </p>
         </div>
         <div id='selectCsv'>
             <p><label for='skusCsv'>To create a new Fusion Table, select a SKU CSV file from your local machine:</label></p>
@@ -436,7 +491,7 @@
         -->
     </script>
 
-    <script type='text/mustache' id='page-3' data-page-name='preview-upload'>
+    <script type='text/handlebars' id='page-3' data-page-name='preview-upload'>
         <h2>Does this look right?</h2>
         <p>USDA SKUs to process:</p>
         <p>{{wizard.state.skusToProcess}}</p>
@@ -449,33 +504,12 @@
         <button id="cancel-skus">Cancel</button>
     </script>
 
-    <script type='text/mustache' data-page-name='upload-skus'>
+    <script type='text/handlebars' data-page-name='upload-skus'>
         <h2>Creating maps... </h2>
         <div id='logWindow'></div>
     </script>
 
-    <script type='text/mustache' data-page-name='resume-previouss'>
-        <h2>Creating Maps</h2>
-        <div id='logWindow'><p>Resuming the previous job.</p></div>
-    </script>
-
-    <script type='text/mustache' data-page-name='review-indexes'>
-        <h2>Please select an index</h2>
-        {{window.wizard.state.indexes}}
-        <ul>
-            {{#wizard.state.indexes}}
-                <li data-goto-page='review-specific-index'>{{.}}</li>
-            {{/wizard.state.indexes}}
-        </ul>
-    </script>
-
-    <script type='text/mustache' data-page-name='no-indexes'>
-        <h2>There are no indexes.</h2>
-        <p>Please upload some SKU/geography.</h2>
-    </script>
-
-    <script type='text/mustache' data-page-name='review-specific-index'>
-        <h2>{{wizard.state.jobName}}</h2>
+    <script type='text/handlebars' id='publish-tables-and-skus'>
         <h3>Publish Maps</h3>
         <p>Maps need to be published by hand before they can be previewed. This will not effect the website's maps.</p>
         <p>
@@ -489,14 +523,44 @@
         </ul>
         <h3>SKU Map Previews</h3>
         <ul class='skus'>
-        {{#wizard.state.skus2ids}}
-            <li>
-                <a target='_new' href='preview-map.html?sku={{sku}};tableId={{id}}'>
-                    {{sku}}
-                </a>
-            </li>
-        {{/wizard.state.skus2ids}}
+            {{#wizard.state.skus2ids}}
+                <li>
+                    <a target='_new' href='preview-map.html?sku={{sku}};tableId={{id}}'>
+                        {{sku}}
+                    </a>
+                </li>
+            {{/wizard.state.skus2ids}}
         </ul>
+    </script>
+
+    <script type='text/handlebars' data-page-name='preview-db'>
+        <h2>SKUs So Far</h2>
+        {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
+    </script>
+
+    <script type='text/handlebars' data-page-name='resume-previous'>
+        <h2>Creating Maps</h2>
+        <div id='logWindow'><p>Resuming the previous job.</p></div>
+    </script>
+
+    <script type='text/handlebars' data-page-name='review-indexes'>
+        <h2>Please select an index</h2>
+        {{window.wizard.state.indexes}}
+        <ul>
+            {{#wizard.state.indexes}}
+                <li data-goto-page='review-specific-index'>{{.}}</li>
+            {{/wizard.state.indexes}}
+        </ul>
+    </script>
+
+    <script type='text/handlebars' data-page-name='no-indexes'>
+        <h2>There are no indexes.</h2>
+        <p>Please upload some SKU/geography.</h2>
+    </script>
+
+    <script type='text/handlebars' data-page-name='review-specific-index'>
+        <h2>{{wizard.state.jobName}}</h2>
+        {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
     </script>
 
 </head>
@@ -539,7 +603,8 @@
         <script src="https://www.google-analytics.com/analytics.js" async defer></script>
         -->
 
-    <script src="https://apis.google.com/js/client.js?onload=ENTER"></script>
+        <div id="spinner" class="loader">Loading...</div>
+        <script src="https://apis.google.com/js/client.js?onload=ENTER"></script>
 </body>
 
 </html>

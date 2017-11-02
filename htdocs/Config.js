@@ -9,7 +9,8 @@
         "maxRetries": 3
     },
     "endpoints": {
-        "uploadSkus": "/cgi-bin/upload-skus.cgi"
+        "uploadSkus": "/cgi-bin/upload-skus.cgi",
+        "previewDb": "/cgi-bin/upload-skus.cgi?action=previewDb"
     },
     "indexBaseDir": "/temp/"
 }
