@@ -10,7 +10,8 @@
     },
     "endpoints": {
         "uploadSkus": "/cgi-bin/upload-skus.cgi",
-        "previewDb": "/cgi-bin/upload-skus.cgi?action=previewDb"
+        "previewDb": "/cgi-bin/upload-skus.cgi?action=previewDb",
+        "lookupSkus": "/cgi-bin/lookup.cgi"
     },
     "indexBaseDir": "/temp/"
 }
