@@ -101,25 +101,37 @@
             // });
         }
 
-        var pagePreviewUploadAfterRender = function () {
-            console.log('Enter uploadAfterRender');
-            document.getElementById('cancel-skus').addEventListener('click', document.location.reload, false);
-            document.getElementById('upload-skus').addEventListener('click', () => { window.wizard.nextPage('upload-skus') }, false);
-        }
 
-        /**
-        * Before the cx closes, server will respond with HTML status updates.
-        */
-        var pageUploadSkusAfterRender = async function () {
+        var pageCgiSomeSkusBeforeRender = async function () {
+            this.state.skusToProcess = document.getElementById('skusToProcess').value;
+        };
+
+        var pageCgiSomeSkusAfterRender = async function () {
+            this.callMethod('cgi', {
+                'action': 'publish-some-skus',
+                'skus-text': this.state.skusToProcess,
+                'index_js_dir': this.state.indexJsDir,
+                'recreate_db': 0,
+                // 'nextPage': 'review-some-skus'
+            }).then( () => {
+                alert('DONE')
+            });
+        };
+
+        var pageUploadSkusAfterRender = function () {
             this.callMethod('cgi', {
                 'action': 'upload-skus',
                 'skus-text': this.state.skusToProcess,
                 'skus-file': this.state.file,
                 'index_js_dir': this.state.indexJsDir,
-                'recreate_db': 1
+                'recreate_db': 1,
+                'nextPage': 'review-specific-index'
             })
         };
 
+        /**
+        * Before the cx closes, server will respond with HTML status updates.
+        */
         var cgi = async function (args) {
             if (! args || !args.action) {
                 throw new Error('No args.action?');
@@ -144,9 +156,15 @@
                     show(request.responseText);
                 }
                 if (request.readyState === XMLHttpRequest.DONE) {
-                    console.log('CGI processing and Google processing complete.');
-                    window.wizard.nextPage('review-specific-index', this.state.indexJsDir);
-                    return Promise.resolve();
+                    if (request.status === 200) {
+                        if (args.nextPage) {
+                            window.wizard.nextPage(args.nextPage, this.state.indexJsDir);
+                        }
+                        return Promise.resolve();
+                    } else {
+                        console.error(request);
+                        return Promise.reject(request.status);
+                    }
                 } else {
                     console.error('Not ready', request.readyState, request.responseText);
                 }
@@ -157,13 +175,15 @@
 
         var pageRestartPreviousAfterRender = function () {
             this.callMethod('cgi', {
-                action: 'restart-previous'
+                action: 'restart-previous',
+                nextPage: 'review-specific-index'
             })
         };
 
         var pageResumePreviousAfterRender = async function () {
             this.callMethod('cgi', {
-                action: 'resume-previous'
+                action: 'resume-previous',
+                nextPage: 'review-specific-index'
             })
         };
 
@@ -233,10 +253,10 @@
 
         /**
          * Pages are `script` elements of `type` `text/handlebars`,
-         *  with a `data-page-name` attribute.
+         *  with a `id` attribute.
          *
          * @example
-         *  <script type=<script type='text/handlebars' data-page-name='manual-auth'> ...
+         *  <script type=<script type='text/handlebars' id='manual-auth'> ...
          *
          * Pages are displayed via `Wizard.nextPage(:pageName)`.
          *
@@ -255,7 +275,7 @@
          * of the ant-cased page name, prefixed with the word 'page'.
          *
          * @example
-         *  <script type=<script type='text/handlebars' data-page-name='manual-auth'> ...
+         *  <script type=<script type='text/handlebars' id='manual-auth'> ...
          *  function pageManualAuth () { ...
          *
          * After a page is displayed, the Wizard will try to call a function with the same name, and the
@@ -304,20 +324,6 @@
             return method.apply(this, args);
         }
 
-        /**
-         * Hides the current page, and processes and shows the template for the element
-         * for the page element whose * `id` attribute matches
-         * the prefix `page-` suffixed with the incremented page number. If a function
-         * exists matching the suffix `page` with the prefix of the page number, it
-         * will be called after the template has been processed and displayed.
-         *
-         * If the numbered page does not exist, the page with the next-highest number is shown.
-         *
-         * Also, if no arg supplied, tries to find data-next-page='name|number' from the current page.
-         *
-         * @param {number} [pageNumber] - Optional page number to which to jump.
-         * @return void
-         */
         Wizard.prototype.nextPage = async function (pageName, ...passOnArgs) {
             console.log('Enter Wizard.nextPage with %s -----------------------------------------', pageName);
 
@@ -327,7 +333,7 @@
                 console.log('Got next-page pageName from data-next-page: ', pageName);
             }
 
-            this.pageEl = document.querySelector('script[type="text/handlebars"][data-page-name="' + pageName + '"]');
+            this.pageEl = document.querySelector('script[type="text/handlebars"][id="' + pageName + '"]');
             if (! this.pageEl) {
                 this.el.main.innerHTML = '<h2>Error</h2><p>Could not find the requested page, ' + pageName + '</p>';
                 return;
@@ -443,31 +449,36 @@
 
     </script>
 
-    <script type='text/handlebars' id='page-100' data-page-name='manual-auth'>
+    <script type='text/handlebars' id='manual-auth'>
         <p>
             <button id='authButton' name='authButton'>Log In</button>
         </p>
     </script>
 
-    <script type='text/handlebars' data-page-name='intro'>
+    <script type='text/handlebars' id='intro'>
         <p>
             We have too much data to fit into a single Fusion table, so this
             app creates several tables and an index which is referenced by
             the map pages.
         </p>
         <ul>
-            <li data-goto-page='select-skus'>Rebuild - upload new SKU geography for processing</lia>
+            <li data-goto-page='select-skus'>Re-initialise - upload new SKU geography for processing</lia>
+            <li data-goto-page='select-some-skus'>Publish some SKUs</lia>
             <li data-goto-page='resume-previous'>Resume the last job</lia>
-            <li data-goto-page='restart-previous'>Restart the last job without uploading more SKUs</lia>
+            <li data-goto-page='restart-previous'>Restart the last job</lia>
             <li data-goto-page='preview-db'>Preview SKUs already uploaded to Google</li>
             <li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li>
         </ul>
     </script>
 
-    <script type='text/handlebars'data-page-name='select-skus'>
+    <script type='text/handlebars'id='select-skus'>
         <h2>Upload SKU Geography</h2>
         <div id='enterSkusToProcess'>
-            <p><label for='skusToProess'>Please enter a list of USDA symbols/SKUs to proceess. Separate mulitple values with spaces and/or commas.</p>
+            <p>
+                <label for='skusToProcess'>
+                    Please enter a list of USDA symbols/SKUs to proceess. Separate mulitple values with spaces and/or commas.
+                </label>
+            </p>
             <p>
                 <textarea id='skusToProcess' name='skusToProcess'></textarea>
             </p>
@@ -488,7 +499,7 @@
         -->
     </script>
 
-    <script type='text/handlebars' id='page-3' data-page-name='preview-upload'>
+    <script type='text/handlebars' id='preview-upload'>
         <h2>Does this look right?</h2>
         <p>USDA SKUs to process:</p>
         <p>{{wizard.state.skusToProcess}}</p>
@@ -497,13 +508,30 @@
             <dt>Size<dt><dd>{{wizard.state.file.size}}</dd>
             <dt>Last Modified<dt><dd>{{wizard.state.file.lastModifiedDate}}</dd>
         </dl>
-        <button id="upload-skus">Process this SKU/geography file?</button>
-        <button id="cancel-skus">Cancel</button>
+        <button data-goto-page="upload-skus">Process this SKU/geography file?</button>
     </script>
 
-    <script type='text/handlebars' data-page-name='upload-skus'>
+    <script type='text/handlebars' id='upload-skus'>
         <h2>Creating maps... </h2>
         <div id='logWindow'></div>
+    </script>
+
+    <script type='text/handlebars' id='select-some-skus'>
+        <p>
+            <label for='skusToProcess'>Please enter a list of USDA symbols/SKUs to proceess.
+                Separate mulitple values with non-alphanumeric characters (comma, space, bar, etc).
+            </label>
+        </p>
+        <p>
+            <textarea id='skusToProcess' name='skusToProcess'></textarea>
+        </p>
+        <p>
+            <button data-goto-page='cgi-some-skus'>Proceed</button>
+    </script>
+
+    <script type='text/handlebars' id='cgi-some-skus'>
+        <h2>Working on some SKUs</h2>
+        <div id='logWindow'><p>Publishing some SKUs.</p></div>
     </script>
 
     <script type='text/handlebars' id='publish-tables-and-skus'>
@@ -530,22 +558,22 @@
         </ul>
     </script>
 
-    <script type='text/handlebars' data-page-name='preview-db'>
+    <script type='text/handlebars' id='preview-db'>
         <h2>SKUs So Far</h2>
         {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
     </script>
 
-    <script type='text/handlebars' data-page-name='restart-previous'>
+    <script type='text/handlebars' id='restart-previous'>
         <h2>Creating Maps</h2>
         <div id='logWindow'><p>Resuming the previous job from scratch.</p></div>
     </script>
 
-    <script type='text/handlebars' data-page-name='resume-previous'>
+    <script type='text/handlebars' id='resume-previous'>
         <h2>Creating Maps</h2>
         <div id='logWindow'><p>Resuming the previous job.</p></div>
     </script>
 
-    <script type='text/handlebars' data-page-name='review-indexes'>
+    <script type='text/handlebars' id='review-indexes'>
         <h2>Please select an index</h2>
         {{window.wizard.state.indexes}}
         <ul>
@@ -555,12 +583,17 @@
         </ul>
     </script>
 
-    <script type='text/handlebars' data-page-name='no-indexes'>
+    <script type='text/handlebars' id='no-indexes'>
         <h2>There are no indexes.</h2>
         <p>Please upload some SKU/geography.</h2>
     </script>
 
-    <script type='text/handlebars' data-page-name='review-specific-index'>
+    <script type='text/handlebars' id='review-some-skus'>
+        <h2>Your New SKU Maps</h2>
+        {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
+    </script>
+
+    <script type='text/handlebars' id='review-specific-index'>
         <h2>{{wizard.state.jobName}}</h2>
         {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
     </script>
