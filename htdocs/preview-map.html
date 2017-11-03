@@ -20,43 +20,62 @@
 
     <script>
         'use strict';
-        var Map, CONFIG, CONFIG_URL = 'Config.js';
+        var CONFIG, CONFIG_URL = 'Config.js';
 
         async function main() {
-            var _ = await fetch(CONFIG_URL);
-            CONFIG = await _.json();
-            var script = document.createElement("script");
-            script.setAttribute(
-                "src",
-                "https://maps.googleapis.com/maps/api/js?key=" + CONFIG.apiKey + "&callback=initMap"
-            );
-            document.getElementsByTagName("head")[0].appendChild(script);
+            var request = new XMLHttpRequest();
+            request.onreadystatechange = () => {
+                if (request.readyState === XMLHttpRequest.DONE && request.status === 200) {
+                    CONFIG = JSON.parse(request.responseText);
+                    var script = document.createElement("script");
+                    script.setAttribute(
+                        "src",
+                        "https://maps.googleapis.com/maps/api/js?key=" + CONFIG.apiKey + "&callback=initMap"
+                    );
+                    document.getElementsByTagName("head")[0].appendChild(script);
+                }
+            }
+            request.open('GET', CONFIG_URL);
+            request.send();
         }
 
         function initMap() {
-            var sku, tableId;
-            var params = document.location.search || document.location.hash;
-            tableId = params.match(/tableId=([^;&]+)/)[1];
-            sku = params.match(/sku=([^;&]+)/)[1];
-            if (!sku) {
-                sku = params;
-                // Now use the index.js.
-            }
-
-            document.title = document.title + ': ' + sku + ' in ' + tableId;
-            Map = new google.maps.Map(document.getElementById('map'), {
+            var map = new google.maps.Map(document.getElementById('map'), {
                 zoom: 4,
                 center: new google.maps.LatLng(
                     39.50, -98.35   //  LAT. 39°50' LONG. -98°35' - centre of the continental USA
                 )
             });
-            sku = 'ARTHR';
+            addFusionTableLayer(map);
+        }
+
+        function addFusionTableLayer(map) {
+            var params = document.location.search || document.location.hash;
+            var sku = params.match(/sku=([^;&]+)/)[1];
+            if (! sku) {
+                sku = params;
+            }
+            if (! sku) alert('No SKU supplied');
+            document.title = document.title + ': ' + sku;
+
+            var request = new XMLHttpRequest();
+            request.onreadystatechange = () => {
+                if (request.readyState === XMLHttpRequest.DONE && request.status === 200) {
+                    var tableId = request.responseText;
+                    showFusionTablesLayer(map, sku, tableId);
+                }
+            }
+            request.open('GET', CONFIG.endpoints.lookupSkus);
+            request.send();
+        }
+
+        function showFusionTablesLayer(map, sku, tableId) {
             var query = {
                 select: 'geometry',
                 from: tableId,
                 where: `'SKU' = '${sku}'`
             };
-            console.log(sku, tableId, query);
+            console.log(query);
             var layer = new google.maps.FusionTablesLayer({
                 query: query,
                 styles: [
@@ -71,7 +90,7 @@
                     }
                 ]
             });
-            layer.setMap(Map);
+            layer.setMap(map);
         }
 
         document.addEventListener("DOMContentLoaded", function (event) {

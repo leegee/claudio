@@ -18,6 +18,13 @@
     <meta name="google-signin-client_id" content="837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com">
 
     <style>
+        #logwindow {
+            position:relative;
+            overflow:auto;
+            height:auto;
+            font-family: monospace;
+            white-space: pre;
+        }
         ul.skus {
             display: block;
             padding-left: 0;
@@ -127,7 +134,6 @@
                     logwindow.scrollTop = logwindow.scrollHeight + logwindow.clientHeight;
                 }
             ;
-            logwindow.setAttribute('style', 'position:relative;overflow:auto;height:20em;font-family: monospace; white-space: pre;');
 
             for (key in args) {
                 data.append( key, args[key] );
