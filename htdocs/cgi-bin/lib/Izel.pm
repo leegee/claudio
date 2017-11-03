@@ -40,6 +40,88 @@ our $CONFIG = {
 	}
 };
 
+sub process_some_skus {
+	my $self = shift;
+	my $args = ref($_[0])? shift : {@_};
+	INFO 'Enter process_some_skus:', Dumper($args);
+	$args->{skus_text} ||= [];
+    if ($args->{skus_text} and not ref $args->{skus_text}){
+        $args->{skus_text} = [ split(/[,\W]+/, $args->{skus_text}) ]
+    }
+    if (not scalar @{$args->{skus_text}}){
+		LOGDIE 'No skus-text supplied! '. Dumper($args->{skus_text});
+	}
+	INFO 'Got SKUs: ', join',',@{$args->{skus_text}};
+
+	my (@already_published, @skus_todo, @invalid_skus);
+	foreach my $sku (@{ $args->{skus_text} }){
+		if ($self->is_sku_valid($sku)){
+			if ($self->is_sku_published($sku)){
+				push(@already_published, $sku)
+			} else {
+				push(@skus_todo, uc $sku)
+			}
+		} else {
+			push @invalid_skus, uc $sku;
+		}
+	}
+
+	if (@invalid_skus) {
+		ERROR 'The following SKUs are invalid: ', join",", @invalid_skus;
+	}
+	if (@already_published) {
+		INFO 'The following SKUs are already public: ', join",", @already_published;
+	}
+
+	if (not scalar @skus_todo) {
+		LOGDIE 'There are no SKUs to publish.';
+	}
+
+	my @merged_table_google_ids;
+	my $tables = $self->create_fusion_tables( \@skus_todo );
+
+	foreach my $table (@$tables) {
+		$table->create();
+		push @merged_table_google_ids, $table->{merged_table_google_id};
+	}
+
+	if (@invalid_skus) {
+		ERROR 'The following SKUs are invalid: ', join",", @invalid_skus;
+	}
+	if (@already_published) {
+		INFO 'The following SKUs are already public: ', join",", @already_published;
+	}
+
+	return $self->create_index_file(@merged_table_google_ids);
+}
+
+sub is_sku_valid {
+	my ($self, $sku) = @_;
+	my $sql = "SELECT sku FROM $CONFIG->{geosku_table_name} WHERE SKU = ? LIMIT 1";
+	$self->{sth}->{is_sku_valid} = $self->{dbh}->prepare($sql);
+	INFO $sql;
+	return $self->{dbh}->selectall_array(
+		$self->{sth}->{is_sku_valid},
+		{},
+		uc $sku
+	);
+}
+
+sub is_sku_published {
+	my ($self, $sku) = @_;
+	$self->{sth}->{is_sku_published} = $self->{dbh}->prepare("
+		SELECT sku, merged_table_id FROM $CONFIG->{geosku_table_name}
+		WHERE SKU = ? AND merged_table_id IS NOT NULL
+		LIMIT 1
+	");
+	return $self->{dbh}->selectall_array(
+		$self->{sth}->{is_sku_published},
+		{},
+		uc $sku
+	);
+}
+
+
 sub date_to_name {
 	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime;
 	return sprintf "%d%02d%02d-%02d%02d%02d/", $year+1900, $mon+1, $mday, $hour, $min, $sec;
@@ -58,7 +140,7 @@ sub upload_skus {
     my $uploaded_sku_csv_path = 'latest_skus.csv';
     $args->{skus_text} ||= [];
     if (not ref $args->{skus_text}){
-        $args->{skus_text} = [ $args->{skus_text}.split(/[,\W]+/) ]
+        $args->{skus_text} = [ split(/[,\W]+/, $args->{skus_text}) ]
     }
 
     binmode $args->{skus_file_handle};
@@ -167,7 +249,7 @@ sub create_from_db {
 	my $self = shift;
 	my @merged_table_google_ids;
 
-	my $tables = $self->create_fusion_tables;
+	my $tables = $self->create_fusion_tables();
 
 	foreach my $table (@$tables) {
 		$table->create();
@@ -398,18 +480,40 @@ sub get_initials {
 
 # Because of https://developers.google.com/fusiontables/docs/v1/using#quota
 sub create_fusion_tables {
-	INFO 'Enter create_fusion_tables';
+	INFO 'Enter create_fusion_tables to compute the number of tables needed....';
 	my $self = shift;
+	my $skus = shift;
+	INFO 'We have ', scalar(@$skus), ' SKUs';
+	if (scalar(@$skus) == 1) {
+		WARN 'One SKU, ', @$skus;
+	}
 	Izel::Table->RESET;
 	my $fusion_table_limit = shift || $FUSION_TABLE_LIMIT;
 	# Do this as bucket brigade
-	my $counts = $self->{dbh}->selectall_arrayref("
-		SELECT COUNT(geo_id2) AS c, sku
+	my $sql = "SELECT COUNT(geo_id2) AS c, sku
 		FROM $CONFIG->{geosku_table_name}
-		WHERE merged_table_id IS NULL
-		GROUP BY sku
-		ORDER BY c DESC
-	");
+		WHERE merged_table_id IS NULL";
+	if ($skus) {
+		$sql .= " AND sku IN ("
+		. join(",", map { $self->{dbh}->quote($_) } @$skus )
+		. ")";
+	}
+	$sql .= " GROUP BY sku ORDER BY c DESC";
+
+	TRACE $sql;
+
+	my $counts = $self->{dbh}->selectall_arrayref($sql);
+
+	if (not $counts) {
+		LOGCONFESS 'Nothing?! ', $sql, "\n\n", Dumper($counts);
+	}
+
+	my @interleaved;
+	while (@$counts) {
+		push @interleaved, shift @$counts;
+		push @interleaved, pop @$counts if @$counts;
+		push @interleaved, pop @$counts if @$counts;
+	}
 
 	my $table_args = {
 		map { $_ => $self->{$_} } qw/ auth_token auth_string output_dir jsoner dbh us_counties_table_id ua/
@@ -420,13 +524,8 @@ sub create_fusion_tables {
 	];
 	my $table_index = 0;
 
-	my @interleaved;
-	while (@$counts) {
-		push @interleaved, shift @$counts;
-		push @interleaved, pop @$counts;
-	}
-
-	foreach my $record (@$interleaved) {
+	foreach my $record (@interleaved) {
+		WARN '...', Dumper $record;
 		# Max 100,000 rows per table for queries
 		# TODO add count of data size < 250 MB per tble, < 1 GB in total,
 		# TODO If big record doesn't fit, find a smaller one.
@@ -605,7 +704,7 @@ sub _create_table_on_google {
 
 	INFO "Posting '$self->{name}' to ", $CONFIG->{endpoints}->{_create_table_on_google};
 	my $res = $self->_post_blob( $CONFIG->{endpoints}->{_create_table_on_google}, $table );
-	LOGCONFESS 'No content.tableId from Google? Res='.(Dumper $res) if not $res->{content}->{tableId};
+	LOGCONFESS 'No content.tableId from Google when creating table? Res='.(Dumper $res) if not $res->{content}->{tableId};
 	$self->{table_id} = $res->{tableId} = $res->{content}->{tableId};
 	INFO "Created empty table ID ", $self->{table_id}, ' ', $self->{name};
 	TRACE Dumper $res;
@@ -711,6 +810,7 @@ sub _populate_table_on_google {
 	my @res;
 
 	foreach my $sku (@{ $self->{skus} }) {
+		INFO 'SKU: ', $sku;
 		my @geo_id2s = $self->get_geoid2s_for_sku($sku);
 		foreach my $geo_id2 (@geo_id2s) {
 			if ($statements >= 500 ) {

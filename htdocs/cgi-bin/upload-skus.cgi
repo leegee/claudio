@@ -37,14 +37,7 @@ if ($cgi->param('action') eq 'upload-skus'){
 # resume-previous
 
 if ($cgi->param('action') eq 'upload-skus'){
-    print "Content-type: text/html\r\n\r\n";
-    $|++;
-    Log::Log4perl->init(\'
-        log4perl.logger = INFO, IzelApp
-        log4perl.appender.IzelApp = HtmlRealTime
-        log4perl.appender.IzelApp.layout = PatternLayout
-        log4perl.appender.IzelApp.layout.ConversionPattern = %d %m %n
-    ');
+    real_time_html();
     INFO "Will upload the file...";
     Izel::upload_skus(
         recreate_db         => $cgi->param('recreate_db'),
@@ -55,9 +48,19 @@ if ($cgi->param('action') eq 'upload-skus'){
     );
 }
 
+elsif ($cgi->param('action') eq 'publish-some-skus') {
+    real_time_html();
+    INFO "Will publish some skus...";
+    Izel->new(
+        output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
+        auth_string         => $ENV{QUERY_STRING},
+    )->process_some_skus(
+        skus_text           => $cgi->param('skus-text') .'',
+    );
+}
+
 elsif ($cgi->param('action') eq 'resume-previous') {
-    print "Content-type: text/html\r\n\r\n";
-    Log::Log4perl->easy_init($TRACE);
+    real_time_html();
     INFO "Will resume the previous upload...";
     Izel->new(
         output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
@@ -66,8 +69,7 @@ elsif ($cgi->param('action') eq 'resume-previous') {
 }
 
 elsif ($cgi->param('action') eq 'restart-previous') {
-    print "Content-type: text/html\r\n\r\n";
-    Log::Log4perl->easy_init($TRACE);
+    real_time_html();
     INFO "Will restart the previous upload...";
     Izel->new(
         output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
@@ -81,12 +83,24 @@ elsif ($cgi->param('action') eq 'previewDb') {
 }
 
 elsif ($cgi->param('action')) {
-    die 'Unknown Action, ' . $cgi->param('action');
+    real_time_html();
+    LOGDIE 'Unknown Action, ' . $cgi->param('action');
 }
 else {
-    die 'Missing action field';
+    real_time_html();
+    LOGDIE 'Missing action field';
 }
 
 exit;
 
 
+sub real_time_html {
+    print "Content-type: text/html\r\n\r\n";
+    $|++;
+    Log::Log4perl->init(\'
+        log4perl.logger = INFO, IzelApp
+        log4perl.appender.IzelApp = HtmlRealTime
+        log4perl.appender.IzelApp.layout = PatternLayout
+        log4perl.appender.IzelApp.layout.ConversionPattern = %d %m %n
+    ');
+}
