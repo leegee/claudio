@@ -28,7 +28,7 @@ require  Text::CSV_XS;
 
 my $DEFAULT_US_COUNTIES_TABLE_ID = '1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV';
 my $TOTAL_COUNTIES_IN_USA = 3_007;
-my $FUSION_TABLE_LIMIT = 10_000; # 100_000
+my $FUSION_TABLE_LIMIT = 100_000;
 
 our $CONFIG = {
 	geosku_table_name	=> 'geosku',
@@ -347,7 +347,9 @@ sub _connect {
 
 	$self->{dbh} = DBI->connect($dsn, $user, $pass, {
 		RaiseError => 1,
-		AutoCommit => 0
+		AutoCommit => 0,
+		mysql_server_prepare => 1,
+		mysql_auto_reconnect => 1,
 	}) or LOGCONFESS $DBI::errstr;
 	TRACE 'Leave _connect';
 }
@@ -418,15 +420,22 @@ sub create_fusion_tables {
 	];
 	my $table_index = 0;
 
-	foreach my $record (@$counts) {
-		# Max 10,000 rows per table for queries
+	my @interleaved;
+	while (@$counts) {
+		push @interleaved, shift @$counts;
+		push @interleaved, pop @$counts;
+	}
+
+	foreach my $record (@$interleaved) {
+		# Max 100,000 rows per table for queries
 		# TODO add count of data size < 250 MB per tble, < 1 GB in total,
+		# TODO If big record doesn't fit, find a smaller one.
 		if ($tables->[$table_index]->{count} + $record->[0] > $fusion_table_limit) {
 			$tables->[$table_index]->create();
 			$table_index ++;
 			$tables->[$table_index] = Izel::Table->new( $table_args );
 		}
-		$tables->[$table_index]->add_count(
+		$tables->[$table_index]->add_sku(
 			count => $record->[0],
 			sku => $record->[1],
 		);
@@ -434,6 +443,13 @@ sub create_fusion_tables {
 
 	INFO 'Leave create_fusion_tables';
 	return $tables;
+}
+
+sub restart_previous {
+	my $self = shift;
+	$self->{dbh}->do("UPDATE $CONFIG->{geosku_table_name} SET merged_table_id = NULL");
+	$self->{dbh}->commit();
+	return $self->create_from_db();
 }
 
 # Upload all skus without a merged_table_id;
@@ -531,7 +547,6 @@ sub _update_skus_merged_table_id {
 	my $self = shift;
 	TRACE 'Enter _update_skus_merged_table_id';
 	$self->require_defined_fields('skus', 'merged_table_google_id');
-die 123;
 	$self->{sth}->{create_merged_table_id} ||= $self->{dbh}->prepare_cached("
 		INSERT INTO $CONFIG->{index_table_name} (url) VALUES (?)
 	");
@@ -555,7 +570,7 @@ die 123;
 	TRACE 'Leave _update_skus_merged_table_id';
 }
 
-sub add_count {
+sub add_sku {
 	my ($self, $args) = (shift, ref($_[0])? shift : {@_} );
 	$self->{count} += $args->{count};
 	push @{ $self->{skus} }, $args->{sku};
