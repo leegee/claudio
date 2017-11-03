@@ -78,7 +78,6 @@
         }
 
         var pageSelectSkusAfterRender = async function () {
-            console.log('Enter page2-------------------------------');
             // window.wizard.fusionTableDetails = await asyncListTables();
             //     window.wizard.nextPage();
             // }
@@ -105,7 +104,20 @@
         * Before the cx closes, server will respond with HTML status updates.
         */
         var pageUploadSkusAfterRender = async function () {
-            console.log('Enter upload to send to CGI');
+            this.callMethod('cgi', {
+                'action': 'upload-skus',
+                'skus-text': this.state.skusToProcess,
+                'skus-file': this.state.file,
+                'index_js_dir': this.state.indexJsDir,
+                'recreate_db': 1
+            })
+        };
+
+        var cgi = async function (args) {
+            if (! args || !args.action) {
+                throw new Error('No args.action?');
+            }
+
             var buffer = '',
                 data = new FormData(),
                 logwindow = document.getElementById('logWindow'),
@@ -117,11 +129,9 @@
             ;
             logwindow.setAttribute('style', 'position:relative;overflow:auto;height:20em;font-family: monospace; white-space: pre;');
 
-            data.append('action', 'upload-skus');
-            data.append('skus-text', this.state.skusToProcess);
-            data.append('skus-file', this.state.file);
-            data.append('index_js_dir', this.state.indexJsDir);
-            data.append('recreate_db', 1);
+            for (key in args) {
+                data.append( key, args[key] );
+            }
 
             request.onreadystatechange = () => {
                 if (request.responseText.length) {
@@ -139,37 +149,16 @@
             request.send(data);
         }
 
+        var pageRestartPreviousAfterRender = function () {
+            this.callMethod('cgi', {
+                action: 'restart-previous'
+            })
+        };
+
         var pageResumePreviousAfterRender = async function () {
-            console.log('Enter resume previous job');
-            var buffer = '',
-                data = new FormData(),
-                logwindow = document.getElementById('logWindow'),
-                request = new XMLHttpRequest(),
-                show = (html) => {
-                    logwindow.innerHTML = html;
-                    logwindow.scrollTop = logwindow.scrollHeight + logwindow.clientHeight;
-                }
-            ;
-            logwindow.setAttribute('style', 'position:relative;overflow:auto;height:20em;font-family: monospace; white-space: pre;');
-
-            data.append('action', 'resume-previous');
-            data.append('index_js_dir', this.state.indexJsDir);
-            data.append('recreate_db', 0);
-
-            request.onreadystatechange = () => {
-                if (request.responseText.length) {
-                    show(request.responseText);
-                }
-                if (request.readyState === XMLHttpRequest.DONE) {
-                    console.log('CGI processing and Google processing complete.');
-                    window.wizard.nextPage('review-specific-index', this.state.indexJsDir);
-                    return Promise.resolve();
-                } else {
-                    console.error('Not ready', request.readyState, request.responseText);
-                }
-            }
-            request.open('POST', Config.endpoints.uploadSkus + '?' + authString(this.state.access_token));
-            request.send(data);
+            this.callMethod('cgi', {
+                action: 'resume-previous'
+            })
         };
 
         var pagePreviewDbBeforeRender = async function () {
@@ -389,6 +378,7 @@
             }
         };
 
+        // {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
         Handlebars.registerHelper('wizardIncludeTemplate', function(templateId) {
             var html = Handlebars.compile(
                 document.getElementById(templateId).innerHTML.toString()
@@ -462,6 +452,7 @@
         <ul>
             <li data-goto-page='select-skus'>Rebuild - upload new SKU geography for processing</lia>
             <li data-goto-page='resume-previous'>Resume the last job</lia>
+            <li data-goto-page='restart-previous'>Restart the last job without uploading more SKUs</lia>
             <li data-goto-page='preview-db'>Preview SKUs already uploaded to Google</li>
             <li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li>
         </ul>
@@ -536,6 +527,11 @@
     <script type='text/handlebars' data-page-name='preview-db'>
         <h2>SKUs So Far</h2>
         {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
+    </script>
+
+    <script type='text/handlebars' data-page-name='restart-previous'>
+        <h2>Creating Maps</h2>
+        <div id='logWindow'><p>Resuming the previous job from scratch.</p></div>
     </script>
 
     <script type='text/handlebars' data-page-name='resume-previous'>
