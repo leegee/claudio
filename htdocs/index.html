@@ -17,61 +17,48 @@
 
     <meta name="google-signin-client_id" content="837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com">
 
-    <style>
-        #logwindow {
-            position:relative;
-            overflow:auto;
-            height:auto;
-            font-family: monospace;
-            white-space: pre;
-        }
-        ul.skus {
-            display: block;
-            padding-left: 0;
-            margin-left: 1em;
-            text-align: justify;
-            text-align-last: center;
-        }
-        ul.skus li {
-            display: inline;
-            padding-left: 0;
-            margin-left: 0;
-            margin-right: 1em;
-            list-style: none;
-        }
-    </style>
-
     <script>
         var Config, Config_Url = 'Config.js';
 
         var ENTER = async function () {
             var _ = await window.fetch(Config_Url);
             Config = await _.json();
-            gapi.auth.authorize({
-                client_id: Config.clientId,
-                scope: Config.scopes,
-                immediate: true
-            }, handleAuthResult);
+            gapi.load('client:auth2', initClient);
         };
 
-        var handleAuthResult = function (authResult) {
-            console.log('authResult = ', authResult);
-            if (authResult && !authResult.error) {
+        function initClient() {
+            gapi.client.init({
+                'apiKey': Config.apiKey,
+                'discoveryDocs': Config.discoveryUrls,
+                'clientId': Config.clientId,
+                'scope': Config.scopes.join(' ')
+            }).then(function () {
+                GoogleAuth = gapi.auth2.getAuthInstance();
+                GoogleAuth.isSignedIn.listen(updateSigninStatus);
+                setSigninStatus();
+                document.getElementById('authButton').addEventListener('click', function () {
+                    GoogleAuth.isSignedIn.get() ? GoogleAuth.signOut() : GoogleAuth.signIn();
+                });
+            });
+        }
+
+        function updateSigninStatus(isSignedIn) {
+            setSigninStatus(isSignedIn);
+        }
+
+        function setSigninStatus(isSignedIn) {
+            var user = GoogleAuth.currentUser.get();
+            var isAuthorized = user.hasGrantedScopes(Config.scopes.join(' '));
+            document.getElementById('authButton').innerHTML = isAuthorized? 'Sign out' : 'Sign In/Authorize';
+            if (isAuthorized){
                 window.wizard = new Wizard({
                     indexBaseDir: Config.indexBaseDir,
                     indexJsDir: Config.indexBaseDir + new Date().toISOString().replace(/\W/g, '_') + '/',
-                    access_token: authResult.access_token
+                    access_token: gapi.auth2.getAuthInstance().currentUser.get().getAuthResponse().access_token
                 });
                 window.wizard.nextPage('menu');
-            } else {
-                console.log('Not authorised');
-                Wizard.hideSpinner();
-                var el = document.getElementById('authButton');
-                // No access token could be retrieved, show the button to start the authorization flow.
-                el.addEventListener('click', ENTER);
-                el.setAttribute('style', 'display:block');
             }
-        };
+        }
 
         const authString = function (accessToken) {
             return 'key=' + Config.apiKey + '&access_token=' + accessToken;
@@ -453,13 +440,6 @@
                 return initial.toUpperCase();
             });
         }
-
-    </script>
-
-    <script type='text/handlebars' id='manual-auth'>
-        <p>
-            <button id='authButton' name='authButton'>Log In</button>
-        </p>
     </script>
 
     <script type='text/handlebars' id='menu'>
@@ -615,7 +595,7 @@
             Authorising with Google....
         </p>
         <p>
-            <button style='display:none' id='authButton' name='authButton'>Log In</button>
+            <button id='authButton' name='authButton'>Log In</button>
         </p>
     </main>
 
@@ -638,8 +618,9 @@
         <script src="https://www.google-analytics.com/analytics.js" async defer></script>
         -->
 
-        <div id="spinner" class="loader">Loading...</div>
-        <script src="https://apis.google.com/js/client.js?onload=ENTER"></script>
-</body>
+        <div id="spinner" class="loader" style="display:none">Loading...</div>
+        <script async defer src="https://apis.google.com/js/api.js" onload="this.onload=function(){};ENTER()" onreadystatechange="if (this.readyState === 'complete') this.onload()">
+        </script>
+    </body>
 
 </html>
