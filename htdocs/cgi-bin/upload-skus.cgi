@@ -26,7 +26,7 @@ my $IN;
 my $cgi = CGI->new;
 my @missing = grep {! $cgi->param($_) } qw/ skus-file index_js_dir action /;
 
-if ($cgi->param('action') eq 'upload-skus'){
+if ($cgi->param('action') =~ /^upload-(db|skus)$/){
     $IN  = $cgi->upload('skus-file');
     push(@missing, '(skus-file is not a filehandle)') if not defined $IN;
     if (@missing) {
@@ -45,6 +45,19 @@ if ($cgi->param('action') eq 'upload-skus'){
         auth_string         => $ENV{QUERY_STRING},
         skus_text           => $cgi->param('skus-text'),
         output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
+    );
+}
+
+elsif ($cgi->param('action') eq 'upload-db'){
+    real_time_html();
+    INFO "Will upload the file...";
+    Izel->new(
+        output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
+        recreate_db         => 1,
+        auth_string         => $ENV{QUERY_STRING},
+        output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
+    )->upload_db(
+        skus_file_handle    => $IN,
     );
 }
 

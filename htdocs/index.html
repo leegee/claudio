@@ -45,7 +45,7 @@
         var Config, Config_Url = 'Config.js';
 
         var ENTER = async function () {
-            var _ = await fetch(Config_Url);
+            var _ = await window.fetch(Config_Url);
             Config = await _.json();
             gapi.auth.authorize({
                 client_id: Config.clientId,
@@ -62,14 +62,14 @@
                     indexJsDir: Config.indexBaseDir + new Date().toISOString().replace(/\W/g, '_') + '/',
                     access_token: authResult.access_token
                 });
-                window.wizard.nextPage('intro');
+                window.wizard.nextPage('menu');
             } else {
                 console.log('Not authorised');
+                Wizard.hideSpinner();
                 var el = document.getElementById('authButton');
                 // No access token could be retrieved, show the button to start the authorization flow.
                 el.addEventListener('click', ENTER);
                 el.setAttribute('style', 'display:block');
-                window.wizard.nextPage('manual-auth');
             }
         };
 
@@ -85,22 +85,11 @@
         }
 
         var pageSelectSkusAfterRender = async function () {
-            // window.wizard.fusionTableDetails = await asyncListTables();
-            //     window.wizard.nextPage();
-            // }
-
             document.getElementById('skusCsv').addEventListener('change', (e) => {
-                this.state.skusToProcess = document.getElementById('skusToProcess').value;
                 this.state.file = e.target.files[0];
                 this.nextPage('preview-upload');
             }, false);
-            // document.getElementById('selectFusionTable').addEventListener('click', function () {
-            //     var selectList = document.getElementById('fusionTableIds');
-            //     window.wizard.state.tableId = selectList.options[ selectList.selectedIndex ].value;
-            //     window.wizard.nextPage('merge');
-            // });
         }
-
 
         var pageCgiSomeSkusBeforeRender = async function () {
             this.state.skusToProcess = document.getElementById('skusToProcess').value;
@@ -120,12 +109,12 @@
 
         var pageUploadSkusAfterRender = function () {
             this.callMethod('cgi', {
-                'action': 'upload-skus',
+                'action': 'upload-db',
                 'skus-text': this.state.skusToProcess,
                 'skus-file': this.state.file,
                 'index_js_dir': this.state.indexJsDir,
                 'recreate_db': 1,
-                'nextPage': 'review-specific-index'
+                'nextPage': 'menu' // 'review-specific-index'
             })
         };
 
@@ -176,14 +165,14 @@
         var pageRestartPreviousAfterRender = function () {
             this.callMethod('cgi', {
                 action: 'restart-previous',
-                nextPage: 'review-specific-index'
+                nextPage: 'menu', // 'review-specific-index'
             })
         };
 
         var pageResumePreviousAfterRender = async function () {
             this.callMethod('cgi', {
                 action: 'resume-previous',
-                nextPage: 'review-specific-index'
+                nextPage: 'menu' // 'review-specific-index'
             })
         };
 
@@ -195,6 +184,25 @@
             var json = await response.json();
             this.callMethod(viewIndex, json);
         };
+
+        var pagePreviewDbAfterRender = async function () {
+            // Access available via publish-tables-and-skus
+            // POST https://www.googleapis.com/drive/v3/files/fileId/permissions
+            Object.keys( this.state.tableInternalId2googleTableId ).forEach( async (iId) => {
+                var fileId = this.state.tableInternalId2googleTableId[iId];
+
+                // POST /drive/v2/files/<fusiontable_id or document_id>/permissions HTTP/1.1
+                var response = await window.fetch(
+                    'https://www.googleapis.com/drive/v2/files/' + fileId + '/permissions?' + authString(this.state.access_token),
+                    {
+                        method: 'POST',
+                        body: JSON.stringify({"role": "reader","type": "anyone","value":"anyone"})
+                    }
+                );
+                var json = await response.json();
+                console.log(json);
+            });
+        }
 
         var viewIndex = function (json) {
             this.state.skus2ids = [];
@@ -231,13 +239,9 @@
 
         // Relies upon server auto-indexing (NB .htaccess created in Izel.pm)
         var pageReviewIndexesBeforeRender = async function () {
-            var response = await window.fetch(
-                this.state.indexBaseDir
-            );
+            var response = await window.fetch( this.state.indexBaseDir );
             var text = await response.text();
-            console.log('Got the text', text);
             this.state.indexes = _linksFromText(text);
-            console.log('Leaving, having set ', this.state.indexes);
         }
 
         var _linksFromText = function (str) {
@@ -296,7 +300,6 @@
             this.state = {};
                 // pageName: null,
                 // lastPageName: null
-            // window.history.popstate();?
             Object.keys(state).forEach((key) => {
                 this.state[key] = state[key];
             });
@@ -310,10 +313,10 @@
             };
             this.hideSpinner();
             this.el.main.setAttribute('style', 'display:block"');
-            window.popstate = (e) => {
-                console.log('POPSTATE ', e);
-                return false;  //pushstate
-            };
+            // if (window.history.state && window.history.state.pageName) {
+            //     this.state = window.history.state;
+            //     this.nextPage(this.state.pageName);
+            // }
         }
 
         Wizard.prototype.callMethod = function (method, ...args) {
@@ -441,6 +444,10 @@
             this.el.spinner.style = 'display: none;';
         };
 
+        Wizard.hideSpinner = function () {
+            document.getElementById('spinner').style = 'display:none';
+        }
+
         Wizard.prototype._antsToCamelCase = function (str) {
             return str.replace(/-(\w)/g, (_, initial) => {
                 return initial.toUpperCase();
@@ -455,48 +462,38 @@
         </p>
     </script>
 
-    <script type='text/handlebars' id='intro'>
-        <p>
-            We have too much data to fit into a single Fusion table, so this
-            app creates several tables and an index which is referenced by
-            the map pages.
-        </p>
+    <script type='text/handlebars' id='menu'>
         <ul>
-            <li data-goto-page='select-skus'>Re-initialise - upload new SKU geography for processing</lia>
             <li data-goto-page='select-some-skus'>Publish some SKUs</lia>
-            <li data-goto-page='resume-previous'>Resume the last job</lia>
+            <li data-goto-page='resume-previous'>Create maps for new SKUs</lia>
             <li data-goto-page='restart-previous'>Restart the last job</lia>
-            <li data-goto-page='preview-db'>Preview SKUs already uploaded to Google</li>
-            <li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li>
+            <li data-goto-page='preview-db'>Preview and publish SKUs already uploaded to Google</li>
+            <!-- li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li -->
+        </ul>
+        <ul>
+            <li data-goto-page='select-skus'>Re-initialise - upload a new SKU-geography CSV.</lia>
         </ul>
     </script>
 
     <script type='text/handlebars'id='select-skus'>
         <h2>Upload SKU Geography</h2>
-        <div id='enterSkusToProcess'>
-            <p>
-                <label for='skusToProcess'>
-                    Please enter a list of USDA symbols/SKUs to proceess. Separate mulitple values with spaces and/or commas.
-                </label>
-            </p>
-            <p>
-                <textarea id='skusToProcess' name='skusToProcess'></textarea>
-            </p>
-        </div>
         <div id='selectCsv'>
-            <p><label for='skusCsv'>To create a new Fusion Table, select a SKU CSV file from your local machine:</label></p>
+            <p><label for='skusCsv'>From your local machine, select the CSV file that maps all SKU to all FIPS.</label></p>
+            <p>Later, you can choose for which SKU to publish maps.</p>
             <p><input type='file' name='skusCsv' id='skusCsv' placeholder='SKUs CSV' type='.csv'></p>
         </div>
-        <!--
-        <div id='listFusionTables' style='display:none'>
-            <p>Or choose an existing Fusion Table from this list of tables stored in your Google account:</p>
-            <select id='fusionTableIds' name='fusionTableIds'>
-                {{#wizard.fusionTableDetails}}
-                    <option value='{{tableId}}'>{{name}} - {{description}}</option>
-                {{/wizard.fusionTableDetails}}
-            </select>
-            <button id='selectFusionTable' name='selectFusionTable'>Choose</button>
-        -->
+    </script>
+
+    <script type='text/handlebars' id='preview-upload'>
+        <h2>Does this look right?</h2>
+        <p>USDA SKUs to process:</p>
+        <p>{{wizard.state.skusToProcess}}</p>
+        <dl>
+            <dt>Name<dt><dd>{{wizard.state.file.name}}</dd>
+            <dt>Size<dt><dd>{{wizard.state.file.size}}</dd>
+            <dt>Last Modified<dt><dd>{{wizard.state.file.lastModifiedDate}}</dd>
+        </dl>
+        <button data-goto-page="upload-skus">Process this SKU/geography file?</button>
     </script>
 
     <script type='text/handlebars' id='preview-upload'>
@@ -512,7 +509,7 @@
     </script>
 
     <script type='text/handlebars' id='upload-skus'>
-        <h2>Creating maps... </h2>
+        <h2>Creating Database... </h2>
         <div id='logWindow'></div>
     </script>
 
@@ -541,9 +538,12 @@
             Follow each link, select <kbd>File</kbd> &gt; <kbd>Share</kbd> &gt; <q>Private (change)</q> &gt;
             <q>On - anyone with the link can view</q>.
         </p>
+        <p>
+            <button id='publish-tableInternalId2googleTableId'>publish-tableInternalId2googleTableId</button>
+        </p>
         <ul>
             {{#wizard.state.tableInternalId2googleTableId}}
-                <li><a target='_new' href='https://fusiontables.google.com/DataSource?docid={{.}}'>{{.}}</a></li>
+                <li><a id='tableId' target='_new' href='https://fusiontables.google.com/DataSource?docid={{.}}'>{{.}}</a></li>
             {{/wizard.state.tableInternalId2googleTableId}}
         </ul>
         <h3>SKU Map Previews</h3>

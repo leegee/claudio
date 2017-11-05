@@ -133,24 +133,16 @@ sub publish_index {
 	File::Copy::move( $args->{from}, $args->{to} );
 }
 
-sub upload_skus {
-    my $inv = ref($_[0]) || $_[0] eq __PACKAGE__? shift : '';
-    my $args = ref($_[0])? shift : {@_};
-    TRACE 'Enter';
+sub copy_cgi_file {
+	my $self = shift;
+	my $skus_file_handle = shift;
     my $uploaded_sku_csv_path = 'latest_skus.csv';
-    $args->{skus_text} ||= [];
-    if (not ref $args->{skus_text}){
-        $args->{skus_text} = [ split(/[,\W]+/, $args->{skus_text}) ]
-    }
-
-    binmode $args->{skus_file_handle};
-
-    TRACE 'Process skus' . ($args->{skus_text} || '');
-    TRACE 'Write uploaded skus to ', $uploaded_sku_csv_path;
+    binmode $skus_file_handle;
+    TRACE 'Write uploaded skus to temp file at ', $uploaded_sku_csv_path;
 
     open my $OUT,">:utf8", $uploaded_sku_csv_path or LOGDIE "$! - $uploaded_sku_csv_path";
 
-    my $io_handle = $args->{skus_file_handle}->handle;
+    my $io_handle = $skus_file_handle->handle;
     binmode $io_handle;
 
     while (my $bytesread = $io_handle->read(my $buffer,1024)) {
@@ -158,11 +150,35 @@ sub upload_skus {
     }
 
     close $OUT;
-    close $args->{skus_file_handle};
+    close $skus_file_handle;
+    TRACE 'Finished writing uploaded db to temp file';
+	return $uploaded_sku_csv_path;
+}
 
-    TRACE 'Finished writing uploaded skus to file';
-    TRACE 'Call create_fusion_csv_multiple';
+sub upload_db {
+    my $self = shift;
+    my $args = ref($_[0])? shift : {@_};
+    TRACE 'Enter upload_db';
+	LOGDIE 'No skus_file_handle' if not $args->{skus_file_handle};
+	my $uploaded_sku_csv_path = $self->copy_cgi_file($args->{skus_file_handle});
 
+    my $jsonRes = Izel->new(
+        auth_string          => $args->{auth_string},
+		output_dir	    	 => $args->{output_dir},
+    )->db_from_csv(
+        skus2fips_csv_path   => $uploaded_sku_csv_path,
+    );
+
+    TRACE 'Done';
+    return $jsonRes;
+}
+
+sub upload_skus {
+    TRACE 'Enter';
+    my $inv = ref($_[0]) || $_[0] eq __PACKAGE__? shift : '';
+    my $args = ref($_[0])? shift : {@_};
+	my $uploaded_sku_csv_path = $self->copy_cgi_file($args->{skus_file_handle});
+    binmode $args->{skus_file_handle};
     my $jsonRes = Izel->new(
         auth_string          => $args->{auth_string},
 		output_dir	    	 => $args->{output_dir},
@@ -171,9 +187,7 @@ sub upload_skus {
         include_only_skus    => $args->{skus_text}
     );
 
-    TRACE 'Done
-
-	';
+    TRACE 'Done';
     return $jsonRes;
 }
 
@@ -202,37 +216,16 @@ sub new {
 	return $self;
 }
 
-=head2 create_from_csv
-
-Creates multiple CSVs and a JSON index of which SKU is in
-which CSV, because Fusion Tables only imports small CSVs at
-the time of writing.
-
-Accepts:
-
-=over 4
-
-=item C<include_only_skus>
-
-Optional array of SKUs by which to filter. If this option is supplied, SKUs in C<county_distributino_path>
-that do not match an entry will be ignored.
-
-=item  C<sku2latin_path>
-
-UNUSED - A CSV of C<SKU,Latin> Name.
-
-=item C<skus2fips_csv_path>
-
-A bar-delimited list of SKU|FIPS, one per line: C<CSC|53007>.
-
-=item C<output_dir>
-
-Directory.
-
-=cut
-
 sub create_from_csv {
-	TRACE "Enter Izel::create";
+	TRACE "Enter Izel::create_from_csv";
+	my $self = shift;
+	my $args = ref($_[0])? shift : {@_};
+	$self->db_from_csv(@_);
+	return $self->tables_from_db();
+}
+
+sub db_from_csv {
+	TRACE "Enter Izel::db_from_csv";
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
 
@@ -241,11 +234,9 @@ sub create_from_csv {
 		separator			=> $args->{separator},
 		include_only_skus	=> $args->{include_only_skus},
 	);
-
-	return $self->create_from_db();
 }
 
-sub create_from_db {
+sub tables_from_db {
 	my $self = shift;
 	my @merged_table_google_ids;
 
@@ -398,7 +389,7 @@ sub ingest_sku_from_csv {
 	}
 
 	$self->{dbh}->commit();
-	DEBUG "Done reading CSV: $count records inserted.";
+	INFO "Done! Processed $count rows from the uploaded CSV file.";
 	close $IN;
 	return $count;
 }
@@ -493,14 +484,15 @@ sub create_fusion_tables {
 	my $sql = "SELECT COUNT(geo_id2) AS c, sku
 		FROM $CONFIG->{geosku_table_name}
 		WHERE merged_table_id IS NULL";
-	if ($skus) {
+
+	if (@$skus) {
 		$sql .= " AND sku IN ("
 		. join(",", map { $self->{dbh}->quote($_) } @$skus )
 		. ")";
 	}
 	$sql .= " GROUP BY sku ORDER BY c DESC";
 
-	TRACE $sql;
+	INFO $sql;
 
 	my $counts = $self->{dbh}->selectall_arrayref($sql);
 
@@ -525,7 +517,6 @@ sub create_fusion_tables {
 	my $table_index = 0;
 
 	foreach my $record (@interleaved) {
-		WARN '...', Dumper $record;
 		# Max 100,000 rows per table for queries
 		# TODO add count of data size < 250 MB per tble, < 1 GB in total,
 		# TODO If big record doesn't fit, find a smaller one.
@@ -548,13 +539,13 @@ sub restart_previous {
 	my $self = shift;
 	$self->{dbh}->do("UPDATE $CONFIG->{geosku_table_name} SET merged_table_id = NULL");
 	$self->{dbh}->commit();
-	return $self->create_from_db();
+	return $self->tables_from_db();
 }
 
 # Upload all skus without a merged_table_id;
 sub resume_previous {
 	my $self = shift;
-	return $self->create_from_db();
+	return $self->tables_from_db();
 }
 
 sub get_skus_not_uploaded {
@@ -632,13 +623,12 @@ sub set_name_from_skus {
 sub create {
 	TRACE 'Enter Izel::Table::Create';
 	my $self = shift;
-	$self->_create_table_on_google();
-	$self->_populate_table_on_google();
-
-	$self->_create_merge();
-
-	$self->_update_skus_merged_table_id();
-
+	if (@{ $self->{skus} }){
+		$self->_create_table_on_google();
+		$self->_populate_table_on_google();
+		$self->_create_merge();
+		$self->_update_skus_merged_table_id();
+	}
 	TRACE 'Leave';
 }
 
