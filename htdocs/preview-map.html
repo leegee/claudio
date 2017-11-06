@@ -63,7 +63,7 @@
             request.onreadystatechange = () => {
                 if (request.readyState === XMLHttpRequest.DONE && request.status === 200) {
                     console.log('DB said: ', request.response);
-                    var tableId = request.responseText;
+                    var tableId = request.responseText.match(/^(\S+)/)[1];
                     showFusionTablesLayer(map, sku, tableId);
                 }
             }
