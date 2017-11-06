@@ -161,12 +161,12 @@ sub copy_cgi_file {
 sub status_json {
 	my $self = shift;
 	my $res = {};
-	$res->{"numberOfTotalSkus"} = $self->{dbh}->selectall_array(
-		"SELECT COUNT(*) FROM $CONFIG->{geosku_table_name}"
-	);
-	$res->{"numberOfPublishedSkus"} = $self->{dbh}->selectall_array(
-		"SELECT COUNT(*) FROM $CONFIG->{geosku_table_name} WHERE merged_table_id IS NULL"
-	);
+	$res->{"numberOfTotalSkus"} = $self->{dbh}->selectall_arrayref(
+		"SELECT COUNT(DISTINCT sku) FROM $CONFIG->{geosku_table_name}"
+	)->[0]->[0];
+	$res->{"numberOfPublishedSkus"} = $self->{dbh}->selectall_arrayref(
+		"SELECT COUNT(DISTINCT sku) FROM $CONFIG->{geosku_table_name} WHERE merged_table_id IS NOT NULL"
+	)->[0]->[0];
 	return $self->{jsoner}->encode( $res );
 }
 
@@ -178,7 +178,7 @@ sub upload_db {
 	my $uploaded_sku_csv_path = $self->copy_cgi_file($args->{skus_file_handle});
 
 	$self->wipe_google_tables();
-	$self->commit();
+	$self->{dbh}->commit();
 	$self->{recreate_db} = 1;
 	$self->get_dbh();
 

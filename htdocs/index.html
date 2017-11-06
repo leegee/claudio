@@ -68,10 +68,10 @@
             this.hide('footer');
             this.el.statusPublished = this.el.statusPublished || document.getElementById('number-of-published-skus');
             this.el.statusTotal = this.el.statusTotal || document.getElementById('number-of-total-skus');
-            console.log(this.el);
             fetch(Config.endpoints.status + ';' + authString(this.state.access_token)).then( (res) => {
                 return res.json();
             }).then( (json) => {
+                console.table(json);
                 this.el.statusPublished.innerHTML = json.numberOfPublishedSkus;
                 this.el.statusTotal.innerHTML = json.numberOfTotalSkus;
             });
@@ -331,6 +331,10 @@
 
         Wizard.prototype.nextPage = async function (pageName, ...passOnArgs) {
             console.log('Enter Wizard.nextPage with %s -----------------------------------------', pageName);
+
+            if (this.state.lastPageName) {
+                await this._execute('page-' + this.state.pageName + '-on-leave', passOnArgs);
+            }
 
             // If not told where to go, check the current template for instructions
             if (! pageName && this.pageEl.nextPageName) {
