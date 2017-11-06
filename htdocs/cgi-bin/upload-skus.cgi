@@ -50,6 +50,7 @@ elsif ($cgi->param('action') eq 'upload-db'){
     )->upload_db(
         skus_file_handle    => $IN,
     );
+    INFO "Finished - you can now leave this screen";
 }
 
 elsif ($cgi->param('action') eq 'augment-db'){
@@ -60,6 +61,7 @@ elsif ($cgi->param('action') eq 'augment-db'){
     )->augment_db(
         skus_file_handle    => $IN,
     );
+    INFO "Finished - you can now leave this screen";
 }
 
 elsif ($cgi->param('action') eq 'publish-some-skus') {
@@ -70,6 +72,7 @@ elsif ($cgi->param('action') eq 'publish-some-skus') {
     )->process_some_skus(
         skus_text           => $cgi->param('skus-text') .'',
     );
+    INFO "Finished - you can now leave this screen";
 }
 
 elsif ($cgi->param('action') eq 'resume-previous') {
@@ -78,6 +81,7 @@ elsif ($cgi->param('action') eq 'resume-previous') {
     Izel->new(
         auth_string         => $ENV{QUERY_STRING},
     )->resume_previous();
+    INFO "Finished - you can now leave this screen";
 }
 
 elsif ($cgi->param('action') eq 'restart-previous') {
@@ -86,6 +90,7 @@ elsif ($cgi->param('action') eq 'restart-previous') {
     Izel->new(
         auth_string         => $ENV{QUERY_STRING},
     )->restart_previous();
+    INFO "Finished - you can now leave this screen";
 }
 
 elsif ($cgi->param('action') eq 'previewDb') {
