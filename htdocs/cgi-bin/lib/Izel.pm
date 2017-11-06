@@ -66,15 +66,17 @@ sub process_some_skus {
 		}
 	}
 
+	my @msg;
 	if (@invalid_skus) {
-		ERROR 'The following SKUs are invalid: ', join",", @invalid_skus;
+		push @msg, 'The following SKUs are invalid: ', join",", @invalid_skus;
 	}
 	if (@already_published) {
-		INFO 'The following SKUs are already public: ', join",", @already_published;
+		push @msg, 'The following SKUs are already public: ', join",", @already_published;
 	}
 
 	if (not scalar @skus_todo) {
-		LOGDIE 'There are no SKUs to publish.';
+		unshift @msg, 'There are no SKUs from your supplied list that can be published.\n\n';
+		LOGDIE join "\n\n", @msg;
 	}
 
 	my @merged_table_google_ids;
@@ -92,7 +94,8 @@ sub process_some_skus {
 		INFO 'The following SKUs are already public: ', join",", @already_published;
 	}
 
-	return $self->create_index_file(@merged_table_google_ids);
+	$self->{dbh}->commit();
+	return;
 }
 
 sub is_sku_valid {
@@ -155,6 +158,18 @@ sub copy_cgi_file {
 	return $uploaded_sku_csv_path;
 }
 
+sub status_json {
+	my $self = shift;
+	my $res = {};
+	$res->{"numberOfTotalSkus"} = $self->{dbh}->selectall_array(
+		"SELECT COUNT(*) FROM $CONFIG->{geosku_table_name}"
+	);
+	$res->{"numberOfPublishedSkus"} = $self->{dbh}->selectall_array(
+		"SELECT COUNT(*) FROM $CONFIG->{geosku_table_name} WHERE merged_table_id IS NULL"
+	);
+	return $self->{jsoner}->encode( $res );
+}
+
 sub upload_db {
     my $self = shift;
     my $args = ref($_[0])? shift : {@_};
@@ -162,9 +177,13 @@ sub upload_db {
 	LOGDIE 'No skus_file_handle' if not $args->{skus_file_handle};
 	my $uploaded_sku_csv_path = $self->copy_cgi_file($args->{skus_file_handle});
 
+	$self->wipe_google_tables();
+	$self->commit();
+	$self->{recreate_db} = 1;
+	$self->get_dbh();
+
     my $jsonRes = Izel->new(
         auth_string          => $args->{auth_string},
-		output_dir	    	 => $args->{output_dir},
     )->db_from_csv(
         skus2fips_csv_path   => $uploaded_sku_csv_path,
     );
@@ -181,7 +200,6 @@ sub upload_skus {
     binmode $args->{skus_file_handle};
     my $jsonRes = Izel->new(
         auth_string          => $args->{auth_string},
-		output_dir	    	 => $args->{output_dir},
     )->create_from_csv(
         skus2fips_csv_path   => $uploaded_sku_csv_path,
         include_only_skus    => $args->{skus_text}
@@ -228,7 +246,7 @@ sub db_from_csv {
 	TRACE "Enter Izel::db_from_csv";
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
-
+	$self->{dbh}->commit();
 	$self->ingest_sku_from_csv(
 		path				=> $args->{skus2fips_csv_path},
 		separator			=> $args->{separator},
@@ -247,37 +265,18 @@ sub tables_from_db {
 		push @merged_table_google_ids, $table->{merged_table_google_id};
 	}
 
-	return $self->create_index_file(@merged_table_google_ids);
+	$self->{dbh}->commit();
+	return;
 }
 
-sub create_htaccess {
-	my $self = shift;
-	my $path = $self->{output_dir} . '/.htaccess';
-	open my $out, '>'.$path or die "$! - $path";
-	print $out "Options +Indexes\n";
-	close $out;
-	TRACE 'Created ', $path;
-}
 
 sub preview_db {
 	my $self = shift;
-	return $self->_make_index_file_json();
+	return $self->make_index_json();
 }
 
 
-sub create_index_file {
-	my ($self, @merged_table_google_ids) = @_;
-	if (!-d $self->{output_dir}) {
-		File::Path::make_path( $self->{output_dir} ) or die "$! - $self->{output_dir}";
-		INFO 'Created output_dir, ' . $self->{output_dir};
-	}
-	$self->create_htaccess;
-	my $json = $self->_make_index_file_json(@merged_table_google_ids);
-	return $self->_write_index_file($json);
-}
-
-
-sub _make_index_file_json {
+sub make_index_json {
 	my ($self, @merged_table_google_ids) = @_;
 	$self->{sth}->{all_skus2table_ids} = $self->{dbh}->prepare("
         SELECT DISTINCT
@@ -317,29 +316,20 @@ sub _make_index_file_json {
 	return $json;
 }
 
-sub _write_index_file {
-	my ($self, $json) = @_;
-	TRACE "Create $self->{output_dir}/index.js";
-	open my $FH, ">:encoding(utf8)", "$self->{output_dir}/index.js" or die "$! - $self->{output_dir}/index.js";
-	print $FH $json;
-	close $FH;
-	INFO "Created $self->{output_dir}/index.js";
-	return $json;
-}
 
 sub ingest_sku_from_csv {
 	TRACE 'Load GEO/SKU from CSV';
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
 
-	if ($args->{include_only_skus}
-		and ref $args->{include_only_skus}
-		and ref $args->{include_only_skus} eq 'ARRAY'
-	) {
-		$args->{include_only_skus} = { map { $_ => 1 } @{$args->{include_only_skus}} }
-	} else {
-		delete $args->{include_only_skus};
-	}
+	# if ($args->{include_only_skus}
+	# 	and ref $args->{include_only_skus}
+	# 	and ref $args->{include_only_skus} eq 'ARRAY'
+	# ) {
+	# 	$args->{include_only_skus} = { map { $_ => 1 } @{$args->{include_only_skus}} }
+	# } else {
+	# 	delete $args->{include_only_skus};
+	# }
 
 	$args->{separator} ||= ',';
 	$args->{commit_every} ||= 10_000;
@@ -377,10 +367,10 @@ sub ingest_sku_from_csv {
 		# TRACE  "$fips -> $sku :: ", join",",@$row;
 		LOGDIE 'FIPS should be numeric, got a row [', join(', ', @$row), ']' if not $fips =~ /^\d+$/;
 		my $geo_id2 = $fips + 0;
-		if (not($args->{include_only_skus}) or exists $args->{include_only_skus}->{$sku}){
+		# if (not($args->{include_only_skus}) or exists $args->{include_only_skus}->{$sku}){
 			$self->insert_geosku( $geo_id2, $sku );
 			$count ++;
-		}
+		# }
 
 		if ($count % $args->{commit_every} == 0) {
 			$self->{dbh}->commit();
@@ -406,19 +396,19 @@ sub _connect {
 
 	# my $dsn = "dbi:SQLite:dbname=$CONFIG->{db_path}"; my $user = ''; my $pass = '';
 	my $dbname = 'geosku';
-	my $dsn = "dbi:mysql:dbname=$dbname";
+	my $dsn = "dbi:mysql"; # "dbi:mysql:dbname=$dbname";
 	my $user = 'root';
 	my $pass = 'admin';
 
-	$self->{dbh} = DBI->connect("DBI:mysql:", $user, $pass);
+	$self->{dbh} = DBI->connect("DBI:mysql:", $user, $pass)
+		or LOGDIE "Cannot connect to local mysql with $user:$pass";
 
 	if ($self->{recreate_db}) {
 		$self->{dbh}->do("DROP DATABASE IF EXISTS $dbname") or LOGDIE "Cannot create database geosku"; # XXX
+		$self->{dbh}->do("CREATE DATABASE IF NOT EXISTS $dbname") or LOGDIE "Cannot create database geosku";
 	}
 
-	$self->{dbh}->do("CREATE DATABASE IF NOT EXISTS $dbname") or LOGDIE "Cannot create database geosku";
-
-	$self->{dbh} = DBI->connect($dsn, $user, $pass, {
+	$self->{dbh} = DBI->connect($dsn . ':'. $dbname, $user, $pass, {
 		RaiseError => 1,
 		AutoCommit => 0,
 		mysql_server_prepare => 1,
@@ -508,7 +498,7 @@ sub create_fusion_tables {
 	}
 
 	my $table_args = {
-		map { $_ => $self->{$_} } qw/ auth_token auth_string output_dir jsoner dbh us_counties_table_id ua/
+		map { $_ => $self->{$_} } qw/ auth_token auth_string jsoner dbh us_counties_table_id ua/
 	};
 
 	my $tables = [
@@ -537,7 +527,6 @@ sub create_fusion_tables {
 
 sub restart_previous {
 	my $self = shift;
-	$self->{dbh}->do("UPDATE $CONFIG->{geosku_table_name} SET merged_table_id = NULL");
 	$self->{dbh}->commit();
 	return $self->tables_from_db();
 }
@@ -546,6 +535,25 @@ sub restart_previous {
 sub resume_previous {
 	my $self = shift;
 	return $self->tables_from_db();
+}
+
+sub wipe_google_tables {
+	TRACE 'Enter';
+	my $self = shift;
+	my @tables = $self->{dbh}->selectall_array("
+		SELECT DISTINCT url FROM $CONFIG->{index_table_name}
+	");
+	TRACE 'URLs for tables: ', join ', ', @tables;
+	foreach my $record (@tables) {
+		TRACE 'Delete table, ', $record->[0];
+		Izel::Table->new(
+			url => $record->[0],
+			dbh => $self->{dbh},
+			auth_string => $self->{auth_string},
+		)->delete_by_url();
+	}
+	$self->{dbh}->do("DELETE FROM $CONFIG->{index_table_name}");
+	$self->{dbh}->do("UPDATE $CONFIG->{geosku_table_name} SET merged_table_id = NULL");
 }
 
 sub get_skus_not_uploaded {
@@ -601,8 +609,6 @@ sub new {
 	$self->{ua}->env_proxy;
 
 	$self = bless $self, ref($inv) ? ref($inv) : $inv;
-
-	$self->require_defined_fields('output_dir');
 
 	return $self;
 }
@@ -849,11 +855,11 @@ sub _create_merge {
 	}
 }
 
-sub delete {
+sub delete_by_url {
 	my $self = shift;
-	$self->require_defined_fields('table_id');
+	$self->require_defined_fields('url');
 	my $url = 'https://www.googleapis.com/fusiontables/v2/tables/'
-		. $self->{table_id} . '?' . $self->{auth_string};
+		. $self->{url} . '?' . $self->{auth_string};
 	INFO 'Delete ', $url;
 	my $response = $self->{ua}->delete($url);
 	my $res = {

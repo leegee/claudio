@@ -21,6 +21,7 @@ $CGI::POST_MAX = 1024 * 100000000; # 208795632
 $CGI::DISABLE_UPLOADS = 0;
 
 die 'No $ENV{DOCUMENT_ROOT} !!!' if not $ENV{DOCUMENT_ROOT};
+die 'No $ENV{QUERY_STRING}' if not $ENV{QUERY_STRING};
 
 my $IN;
 my $cgi = CGI->new;
@@ -34,28 +35,18 @@ if ($cgi->param('action') =~ /^upload-(db|skus)$/){
     }
 }
 
-# resume-previous
-
-if ($cgi->param('action') eq 'upload-skus'){
-    real_time_html();
-    INFO "Will upload the file...";
-    Izel::upload_skus(
-        recreate_db         => $cgi->param('recreate_db'),
-        skus_file_handle    => $IN,
+if ($cgi->param('action') eq 'status'){
+    print "content-type:application/json\n\n";
+    print Izel->new(
         auth_string         => $ENV{QUERY_STRING},
-        skus_text           => $cgi->param('skus-text'),
-        output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
-    );
+    )->status_json();
 }
 
 elsif ($cgi->param('action') eq 'upload-db'){
     real_time_html();
     INFO "Will upload the file...";
     Izel->new(
-        output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
-        recreate_db         => 1,
         auth_string         => $ENV{QUERY_STRING},
-        output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
     )->upload_db(
         skus_file_handle    => $IN,
     );
@@ -65,7 +56,6 @@ elsif ($cgi->param('action') eq 'publish-some-skus') {
     real_time_html();
     INFO "Will publish some skus...";
     Izel->new(
-        output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
         auth_string         => $ENV{QUERY_STRING},
     )->process_some_skus(
         skus_text           => $cgi->param('skus-text') .'',
@@ -76,7 +66,6 @@ elsif ($cgi->param('action') eq 'resume-previous') {
     real_time_html();
     INFO "Will resume the previous upload...";
     Izel->new(
-        output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
         auth_string         => $ENV{QUERY_STRING},
     )->resume_previous();
 }
@@ -85,7 +74,6 @@ elsif ($cgi->param('action') eq 'restart-previous') {
     real_time_html();
     INFO "Will restart the previous upload...";
     Izel->new(
-        output_dir          => $ENV{DOCUMENT_ROOT} .'/'. $cgi->param('index_js_dir') .'/',
         auth_string         => $ENV{QUERY_STRING},
     )->restart_previous();
 }
@@ -111,9 +99,13 @@ sub real_time_html {
     print "Content-type: text/html\r\n\r\n";
     $|++;
     Log::Log4perl->init(\'
-        log4perl.logger = INFO, IzelApp
+        log4perl.logger = TRACE, IzelApp, Screen
         log4perl.appender.IzelApp = HtmlRealTime
         log4perl.appender.IzelApp.layout = PatternLayout
         log4perl.appender.IzelApp.layout.ConversionPattern = %d %m %n
+        log4perl.appender.Screen        = Log::Log4perl::Appender::Screen
+        log4perl.appender.Screen.stderr = 1
+        log4perl.appender.Screen.layout = PatternLayout
+        log4perl.appender.Screen.layout.ConversionPattern = %d %M LINE %L - %m %n
     ');
 }
