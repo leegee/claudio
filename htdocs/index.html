@@ -109,8 +109,8 @@
                 'action': 'publish-some-skus',
                 'skus-text': this.state.skusToProcess,
                 'index_js_dir': this.state.indexJsDir,
-                'recreate_db': 0,
                 // 'nextPage': 'review-some-skus'
+                // 'nextPage': 'preview-db'
             });
         };
 
@@ -191,7 +191,7 @@
             this.callAsMethod(viewIndex, json);
         };
 
-        var publishFusionTable = function(fileId, next) {
+        var publishFusionTable = async function(fileId, next) {
             // POST /drive/v2/files/<fusiontable_id or document_id>/permissions HTTP/1.1
             var response = await window.fetch(
                 'https://www.googleapis.com/drive/v2/files/' + fileId + '/permissions?' + authString(this.state.access_token),
@@ -215,10 +215,11 @@
             if (! this.el.publishTables){
                 this.el.publishTables = document.getElementById('publish-tableInternalId2googleTableId');
                 this.el.publishTables.addEventListener('click', () => {
-                Object.keys( this.state.tableInternalId2googleTableId ).forEach( async (iId) => {
-                    this.callAsMethod('publishFusionTable', this.state.tableInternalId2googleTableId[iId]);
+                    Object.keys( this.state.tableInternalId2googleTableId ).forEach( async (iId) => {
+                        this.callAsMethod('publishFusionTable', this.state.tableInternalId2googleTableId[iId]);
+                    });
                 });
-            });
+            }
         }
 
         var viewIndex = function (json) {
@@ -489,14 +490,17 @@
             <span id='number-of-total-skus'></span> known SKUs.
         </div>
         <ul>
+            <!--
             <li data-goto-page='select-some-skus'>Publish some SKUs</lia>
             <li data-goto-page='resume-previous'>Create maps for new SKUs</lia>
             <li data-goto-page='restart-previous'>Restart the last job</lia>
-            <li data-goto-page='preview-db'>Preview and publish SKUs already uploaded to Google</li>
-            <!-- li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li -->
+            <li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li>
+         -->
+         <li data-goto-page='select-some-skus'>Create maps for some SKUs</lia>
+         <li data-goto-page='preview-db'>Publish uploaded SKUs</li>
         </ul>
         <ul>
-            <li data-goto-page='select-skus'>Re-initialise - wipe the DB and upload a new SKU-geography CSV.</lia>
+            <li data-goto-page='select-skus'>Start again - wipe the DB, delete all Fusion Tables, and upload a new SKU-geography CSV.</lia>
         </ul>
     </script>
 

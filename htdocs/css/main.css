@@ -324,15 +324,17 @@ footer {
 }
 /* info */
 .loglevel_1 {
-    color: blue;
+    color: navy;
 }
 /* warn */
 .loglevel_3 {
     color: orange;
+    font-weight: bold;
 }
 /* fatal */
 .loglevel_7 {
     color: red;
+    font-weight: bolder;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -349,9 +351,9 @@ header h2 {
 }
 
 #log-window {
-    position:relative;
-    overflow:auto;
-    height:auto;
+    position: relative;
+    overflow: auto;
+    height: auto;
     font-family: monospace;
     white-space: pre;
 }
