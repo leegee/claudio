@@ -72,8 +72,8 @@
                     return res.json();
                 }).then( (json) => {
                     console.table(json);
-                    this.el.statusPublished.innerHTML = json.numberOfPublishedSkus;
-                    this.el.statusTotal.innerHTML = json.numberOfTotalSkus;
+                    this.el.statusPublished.innerHTML = Number(json.numberOfPublishedSkus).toLocaleString();
+                    this.el.statusTotal.innerHTML = Number(json.numberOfTotalSkus).toLocaleString();
                 });
             }
 
@@ -93,6 +93,13 @@
             return (await response.json()).items;
         }
 
+        var pageSelectAugmentDbAfterRender = async function () {
+            document.getElementById('skusCsvAugment').addEventListener('change', (e) => {
+                this.state.file = e.target.files[0];
+                this.nextPage('augment-db');
+            }, false);
+        }
+
         var pageSelectSkusAfterRender = async function () {
             document.getElementById('skusCsv').addEventListener('change', (e) => {
                 this.state.file = e.target.files[0];
@@ -108,18 +115,23 @@
             this.callAsMethod('cgi', {
                 'action': 'publish-some-skus',
                 'skus-text': this.state.skusToProcess,
-                'index_js_dir': this.state.indexJsDir,
                 // 'nextPage': 'review-some-skus'
                 // 'nextPage': 'preview-db'
             });
         };
 
+        var pageAugmentDbAfterRender = function () {
+            this.callAsMethod('cgi', {
+                'action': 'augment-db',
+                'skus-file': this.state.file
+                // 'nextPage': 'menu' // 'review-specific-index'
+            })
+        };
+
         var pageUploadDbAfterRender = function () {
             this.callAsMethod('cgi', {
                 'action': 'upload-db',
-                'skus-text': this.state.skusToProcess,
                 'skus-file': this.state.file,
-                'index_js_dir': this.state.indexJsDir,
                 'nextPage': 'menu' // 'review-specific-index'
             })
         };
@@ -486,8 +498,8 @@
 
     <script type='text/handlebars' id='menu'>
         <div id='status'>
-            Published <span id='number-of-published-skus'></span> of
-            <span id='number-of-total-skus'></span> known SKUs.
+            Published <span id='number-of-published-skus'>[click to update]</span> of
+            <span id='number-of-total-skus'>[click to update]</span> known SKUs.
         </div>
         <ul>
             <!--
@@ -500,8 +512,18 @@
          <li data-goto-page='preview-db'>Publish uploaded SKUs</li>
         </ul>
         <ul>
+            <li data-goto-page='select-augment-db'>Add another SKU-geography CSV.</lia>
             <li data-goto-page='select-skus'>Start again - wipe the DB, delete all Fusion Tables, and upload a new SKU-geography CSV.</lia>
         </ul>
+    </script>
+
+    <script type='text/handlebars'id='select-augment-db'>
+        <h2>Upload SKU Geography To Augment Database</h2>
+        <div id='selectCsv'>
+            <p><label for='skusCsvAugment'>From your local machine, select the CSV file that maps all SKU to all FIPS.</label></p>
+            <p>Later, you can choose for which SKU to publish maps.</p>
+            <p><input type='file' name='skusCsvAugment' id='skusCsvAugment' placeholder='SKUs CSV' type='.csv'></p>
+        </div>
     </script>
 
     <script type='text/handlebars'id='select-skus'>
@@ -525,16 +547,9 @@
         <button data-goto-page="upload-db">Process this SKU/geography file?</button>
     </script>
 
-    <script type='text/handlebars' id='preview-upload'>
-        <h2>Does this look right?</h2>
-        <p>USDA SKUs to process:</p>
-        <p>{{wizard.state.skusToProcess}}</p>
-        <dl>
-            <dt>Name<dt><dd>{{wizard.state.file.name}}</dd>
-            <dt>Size<dt><dd>{{wizard.state.file.size}}</dd>
-            <dt>Last Modified<dt><dd>{{wizard.state.file.lastModifiedDate}}</dd>
-        </dl>
-        <button data-goto-page="upload-db">Process this SKU/geography file?</button>
+    <script type='text/handlebars' id='augment-db'>
+        <h2>Augmenting Database... </h2>
+        <div id='log-window'></div>
     </script>
 
     <script type='text/handlebars' id='upload-db'>

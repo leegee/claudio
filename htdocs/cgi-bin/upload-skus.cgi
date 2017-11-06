@@ -25,9 +25,9 @@ die 'No $ENV{QUERY_STRING}' if not $ENV{QUERY_STRING};
 
 my $IN;
 my $cgi = CGI->new;
-my @missing = grep {! $cgi->param($_) } qw/ skus-file index_js_dir action /;
+my @missing = grep {! $cgi->param($_) } qw/ skus-file action /;
 
-if ($cgi->param('action') =~ /^upload-(db|skus)$/){
+if ($cgi->param('action') =~ /^(augment|upload)-db$/){
     $IN  = $cgi->upload('skus-file');
     push(@missing, '(skus-file is not a filehandle)') if not defined $IN;
     if (@missing) {
@@ -48,6 +48,16 @@ elsif ($cgi->param('action') eq 'upload-db'){
     Izel->new(
         auth_string         => $ENV{QUERY_STRING},
     )->upload_db(
+        skus_file_handle    => $IN,
+    );
+}
+
+elsif ($cgi->param('action') eq 'augment-db'){
+    real_time_html();
+    INFO "Will upload the file...";
+    Izel->new(
+        auth_string         => $ENV{QUERY_STRING},
+    )->augment_db(
         skus_file_handle    => $IN,
     );
 }

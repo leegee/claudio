@@ -170,45 +170,6 @@ sub status_json {
 	return $self->{jsoner}->encode( $res );
 }
 
-sub upload_db {
-    my $self = shift;
-    my $args = ref($_[0])? shift : {@_};
-    TRACE 'Enter upload_db';
-	LOGDIE 'No skus_file_handle' if not $args->{skus_file_handle};
-	my $uploaded_sku_csv_path = $self->copy_cgi_file($args->{skus_file_handle});
-
-	$self->wipe_google_tables();
-	$self->{dbh}->commit();
-	$self->{recreate_db} = 1;
-	$self->get_dbh();
-
-    my $jsonRes = Izel->new(
-        auth_string          => $args->{auth_string},
-    )->db_from_csv(
-        skus2fips_csv_path   => $uploaded_sku_csv_path,
-    );
-
-    TRACE 'Done';
-    return $jsonRes;
-}
-
-sub upload_skus {
-    TRACE 'Enter';
-    my $inv = ref($_[0]) || $_[0] eq __PACKAGE__? shift : '';
-    my $args = ref($_[0])? shift : {@_};
-	my $uploaded_sku_csv_path = $self->copy_cgi_file($args->{skus_file_handle});
-    binmode $args->{skus_file_handle};
-    my $jsonRes = Izel->new(
-        auth_string          => $args->{auth_string},
-    )->create_from_csv(
-        skus2fips_csv_path   => $uploaded_sku_csv_path,
-        include_only_skus    => $args->{skus_text}
-    );
-
-    TRACE 'Done';
-    return $jsonRes;
-}
-
 sub new {
 	my $inv  = shift;
 	my $args = ref($_[0])? shift : {@_};
@@ -232,6 +193,44 @@ sub new {
 	$self->get_dbh;
 
 	return $self;
+}
+
+sub upload_db {
+    my $self = shift;
+    my $args = ref($_[0])? shift : {@_};
+    TRACE 'Enter upload_db';
+	LOGDIE 'No skus_file_handle' if not $args->{skus_file_handle};
+	my $uploaded_sku_csv_path = $self->copy_cgi_file($args->{skus_file_handle});
+
+	$self->wipe_google_tables();
+	$self->{dbh}->commit();
+
+    my $jsonRes = Izel->new(
+		recreate_db			=> 1,
+        auth_string         => $args->{auth_string},
+    )->db_from_csv(
+        skus2fips_csv_path  => $uploaded_sku_csv_path,
+    );
+
+    TRACE 'Done';
+    return $jsonRes;
+}
+
+sub augment_db {
+    my $self = shift;
+    my $args = ref($_[0])? shift : {@_};
+    TRACE 'Enter upload_db';
+	LOGDIE 'No skus_file_handle' if not $args->{skus_file_handle};
+	my $uploaded_sku_csv_path = $self->copy_cgi_file($args->{skus_file_handle});
+
+    my $jsonRes = Izel->new(
+        auth_string          => $args->{auth_string},
+    )->db_from_csv(
+        skus2fips_csv_path   => $uploaded_sku_csv_path,
+    );
+
+    TRACE 'Done';
+    return $jsonRes;
 }
 
 sub lookup {
@@ -284,12 +283,6 @@ sub tables_from_db {
 
 
 sub preview_db {
-	my $self = shift;
-	return $self->make_index_json();
-}
-
-
-sub make_index_json {
 	my ($self, @merged_table_google_ids) = @_;
 	$self->{sth}->{all_skus2table_ids} = $self->{dbh}->prepare("
         SELECT DISTINCT
