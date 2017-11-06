@@ -66,16 +66,25 @@
 
         var pageMenuAfterRender = function () {
             this.hide('footer');
+
+            this.updateStatus = this.updateStatus || function () {
+                fetch(Config.endpoints.status + ';' + authString(this.state.access_token)).then( (res) => {
+                    return res.json();
+                }).then( (json) => {
+                    console.table(json);
+                    this.el.statusPublished.innerHTML = json.numberOfPublishedSkus;
+                    this.el.statusTotal.innerHTML = json.numberOfTotalSkus;
+                });
+            }
+
             this.el.statusPublished = this.el.statusPublished || document.getElementById('number-of-published-skus');
             this.el.statusTotal = this.el.statusTotal || document.getElementById('number-of-total-skus');
-            fetch(Config.endpoints.status + ';' + authString(this.state.access_token)).then( (res) => {
-                return res.json();
-            }).then( (json) => {
-                console.table(json);
-                this.el.statusPublished.innerHTML = json.numberOfPublishedSkus;
-                this.el.statusTotal.innerHTML = json.numberOfTotalSkus;
-            });
-        }
+            this.el.status = this.el.status || document.getElementById('status');
+            this.el.status.addEventListener('click', () => {
+                this.updateStatus();
+            })
+            this.updateStatus();
+        };
 
         var asyncListTables = async function () {
             const response = await window.fetch(
@@ -96,7 +105,7 @@
         };
 
         var pageCgiSomeSkusAfterRender = async function () {
-            this.callMethod('cgi', {
+            this.callAsMethod('cgi', {
                 'action': 'publish-some-skus',
                 'skus-text': this.state.skusToProcess,
                 'index_js_dir': this.state.indexJsDir,
@@ -106,7 +115,7 @@
         };
 
         var pageUploadDbAfterRender = function () {
-            this.callMethod('cgi', {
+            this.callAsMethod('cgi', {
                 'action': 'upload-db',
                 'skus-text': this.state.skusToProcess,
                 'skus-file': this.state.file,
@@ -160,14 +169,14 @@
         }
 
         var pageRestartPreviousAfterRender = function () {
-            this.callMethod('cgi', {
+            this.callAsMethod('cgi', {
                 action: 'restart-previous',
                 nextPage: 'menu', // 'review-specific-index'
             })
         };
 
         var pageResumePreviousAfterRender = async function () {
-            this.callMethod('cgi', {
+            this.callAsMethod('cgi', {
                 action: 'resume-previous',
                 nextPage: 'menu' // 'review-specific-index'
             })
@@ -179,25 +188,36 @@
                 Config.endpoints.previewDb
             );
             var json = await response.json();
-            this.callMethod(viewIndex, json);
+            this.callAsMethod(viewIndex, json);
+        };
+
+        var publishFusionTable = function(fileId, next) {
+            // POST /drive/v2/files/<fusiontable_id or document_id>/permissions HTTP/1.1
+            var response = await window.fetch(
+                'https://www.googleapis.com/drive/v2/files/' + fileId + '/permissions?' + authString(this.state.access_token),
+                {
+                    method: 'POST',
+                    body: JSON.stringify({"role": "reader","type": "anyone"}),
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+            var json = await response.json();
+            console.log(json);
+            if (next) {
+                this.callAsMethod(next, json);
+            }
         };
 
         var pagePreviewDbAfterRender = async function () {
-            // Access available via publish-tables-and-skus
-            // POST https://www.googleapis.com/drive/v3/files/fileId/permissions
-            Object.keys( this.state.tableInternalId2googleTableId ).forEach( async (iId) => {
-                var fileId = this.state.tableInternalId2googleTableId[iId];
-
-                // POST /drive/v2/files/<fusiontable_id or document_id>/permissions HTTP/1.1
-                var response = await window.fetch(
-                    'https://www.googleapis.com/drive/v2/files/' + fileId + '/permissions?' + authString(this.state.access_token),
-                    {
-                        method: 'POST',
-                        body: JSON.stringify({"role": "reader","type": "anyone","value":"anyone"})
-                    }
-                );
-                var json = await response.json();
-                console.log(json);
+            if (! this.el.publishTables){
+                this.el.publishTables = document.getElementById('publish-tableInternalId2googleTableId');
+                this.el.publishTables.addEventListener('click', () => {
+                Object.keys( this.state.tableInternalId2googleTableId ).forEach( async (iId) => {
+                    this.callAsMethod('publishFusionTable', this.state.tableInternalId2googleTableId[iId]);
+                });
             });
         }
 
@@ -230,7 +250,7 @@
             var url = (this.state.jobName + '/index.js').replace(/\/+/g, '/');
             var response = await window.fetch(url);
             var json = await response.json();
-            this.callMethod(viewIndex, json);
+            this.callAsMethod(viewIndex, json);
             console.log('Leave pageReviewSpecificIndexBeforeRender with ', this.state.skus2ids)
         }
 
@@ -321,8 +341,8 @@
             // }
         }
 
-        Wizard.prototype.callMethod = function (method, ...args) {
-            console.log('callMethod ', method, args);
+        Wizard.prototype.callAsMethod = function (method, ...args) {
+            console.log('callAsMethod ', method, args);
             if (typeof method === 'string') {
                 method = window[method];
             }
@@ -538,13 +558,8 @@
 
     <script type='text/handlebars' id='publish-tables-and-skus'>
         <h3>Publish Maps</h3>
-        <p>Maps need to be published by hand before they can be previewed. This will not effect the website's maps.</p>
         <p>
-            Follow each link, select <kbd>File</kbd> &gt; <kbd>Share</kbd> &gt; <q>Private (change)</q> &gt;
-            <q>On - anyone with the link can view</q>.
-        </p>
-        <p>
-            <button id='publish-tableInternalId2googleTableId'>publish-tableInternalId2googleTableId</button>
+            <button id='publish-tableInternalId2googleTableId'>Publish all Fusion Tables</button>
         </p>
         <ul>
             {{#wizard.state.tableInternalId2googleTableId}}
@@ -555,7 +570,7 @@
         <ul class='skus'>
             {{#wizard.state.skus2ids}}
                 <li>
-                    <a target='_new' href='preview-map.html?sku={{sku}};tableId={{id}}'>
+                    <a target='_new' href='preview-map.html#{{sku}}'>
                         {{sku}}
                     </a>
                 </li>
