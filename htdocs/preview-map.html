@@ -50,22 +50,24 @@
         }
 
         function addFusionTableLayer(map) {
-            var params = document.location.search || document.location.hash;
-            var sku = params.match(/sku=([^;&]+)/)[1];
-            if (! sku) {
-                sku = params;
+            var sku;
+            try {
+                sku = document.location.search.substr(1) || document.location.hash.substr(1);
+            } catch (e) {
+                console.error(e);
+                alert('No SKU supplied');
             }
-            if (! sku) alert('No SKU supplied');
             document.title = document.title + ': ' + sku;
 
             var request = new XMLHttpRequest();
             request.onreadystatechange = () => {
                 if (request.readyState === XMLHttpRequest.DONE && request.status === 200) {
+                    console.log('DB said: ', request.response);
                     var tableId = request.responseText;
                     showFusionTablesLayer(map, sku, tableId);
                 }
             }
-            request.open('GET', CONFIG.endpoints.lookupSkus);
+            request.open('GET', CONFIG.endpoints.lookupSkus + '?' + sku);
             request.send();
         }
 

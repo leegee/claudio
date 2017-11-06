@@ -234,6 +234,19 @@ sub new {
 	return $self;
 }
 
+sub lookup {
+	my ($self, $sku) = @_;
+	return $self->{dbh}->selectall_arrayref("
+		SELECT DISTINCT $CONFIG->{index_table_name}.url AS googleTableId,
+			$CONFIG->{geosku_table_name}.sku AS sku,
+			$CONFIG->{index_table_name}.id AS internalTableId
+		FROM $CONFIG->{geosku_table_name}
+		JOIN $CONFIG->{index_table_name}
+		ON $CONFIG->{geosku_table_name}.merged_table_id = $CONFIG->{index_table_name}.id
+		WHERE sku = ?
+	", {}, $sku)->[0][0];
+}
+
 sub create_from_csv {
 	TRACE "Enter Izel::create_from_csv";
 	my $self = shift;
