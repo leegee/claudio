@@ -36,6 +36,7 @@ if ($cgi->param('action') =~ /^(augment|upload)-db$/){
 }
 
 if ($cgi->param('action') eq 'status'){
+    logging();
     print "content-type:application/json\n\n";
     print Izel->new(
         auth_string         => $ENV{QUERY_STRING},
@@ -93,9 +94,11 @@ elsif ($cgi->param('action') eq 'restart-previous') {
     INFO "Finished - you can now leave this screen";
 }
 
-elsif ($cgi->param('action') eq 'previewDb') {
+elsif ($cgi->param('action') eq 'preview-db') {
+    logging();
     print "Content-type: application/json\n\n",
         Izel->new()->preview_db();
+    INFO "Finished - you can now leave this screen";
 }
 
 elsif ($cgi->param('action')) {
@@ -118,6 +121,17 @@ sub real_time_html {
         log4perl.appender.IzelApp = HtmlRealTime
         log4perl.appender.IzelApp.layout = PatternLayout
         log4perl.appender.IzelApp.layout.ConversionPattern = %d %m %n
+        log4perl.appender.Screen        = Log::Log4perl::Appender::Screen
+        log4perl.appender.Screen.stderr = 1
+        log4perl.appender.Screen.layout = PatternLayout
+        log4perl.appender.Screen.layout.ConversionPattern = %d %M LINE %L - %m %n
+    ');
+}
+
+sub logging {
+    $|++;
+    Log::Log4perl->init(\'
+        log4perl.logger = DEBUG, Screen
         log4perl.appender.Screen        = Log::Log4perl::Appender::Screen
         log4perl.appender.Screen.stderr = 1
         log4perl.appender.Screen.layout = PatternLayout

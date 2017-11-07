@@ -43,7 +43,7 @@ our $CONFIG = {
 sub process_some_skus {
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
-	INFO 'Enter process_some_skus:', Dumper($args);
+	INFO 'Enter process_some_skus:';
 	$args->{skus_text} ||= [];
     if ($args->{skus_text} and not ref $args->{skus_text}){
         $args->{skus_text} = [ split(/[,\W]+/, $args->{skus_text}) ]
@@ -79,11 +79,14 @@ sub process_some_skus {
 		LOGDIE join "\n\n", @msg;
 	}
 
+	WARN join '\n\n', @msg;
+
 	my @merged_table_google_ids;
 	my $tables = $self->create_fusion_tables( \@skus_todo );
 
 	foreach my $table (@$tables) {
 		$table->create();
+		INFO 'Created merged table, ', $table->{merged_table_google_id};
 		push @merged_table_google_ids, $table->{merged_table_google_id};
 	}
 
@@ -288,7 +291,8 @@ sub preview_db {
         SELECT DISTINCT
 		      $CONFIG->{geosku_table_name}.sku AS sku,
 		      $CONFIG->{index_table_name}.url AS googleTableId,
-		      $CONFIG->{index_table_name}.id AS internalTableId
+		      $CONFIG->{index_table_name}.id AS internalTableId,
+			  $CONFIG->{index_table_name}.published AS published
 		 FROM $CONFIG->{geosku_table_name}
 		 JOIN $CONFIG->{index_table_name}
 		   ON $CONFIG->{geosku_table_name}.merged_table_id = $CONFIG->{index_table_name}.id
@@ -300,23 +304,22 @@ sub preview_db {
 
 	my @tableInternalId2googleTableId;
 
+	my $sql = "SELECT id, url, published FROM $CONFIG->{index_table_name}";
 	if (@merged_table_google_ids) {
-		@tableInternalId2googleTableId = $self->{dbh}->selectall_array("
-			SELECT id, url FROM $CONFIG->{index_table_name}
-			WHERE url IN ("
+		$sql .= " WHERE url IN ("
 			. join(",", map {$self->{dbh}->quote($_)} @merged_table_google_ids)
-			. ")
-		");
-	} else {
-		INFO 'Getting all URLs';
-		@tableInternalId2googleTableId = $self->{dbh}->selectall_array("
-			SELECT id, url FROM $CONFIG->{index_table_name}
-		");
+			. ")";
 	}
+
+	@tableInternalId2googleTableId = $self->{dbh}->selectall_array($sql);
+
+	INFO 'Got ', (1+$#tableInternalId2googleTableId), ' live tables';
+	INFO 'Got ', (1+$#skus2table_ids), ' total SKUs';
 
 	my $json = $self->{jsoner}->encode({
 		sku2tableInternalId => { map { $_->[0] => $_->[2] } @skus2table_ids },
 		tableInternalId2googleTableId  => { map { $_->[0] => $_->[1] } @tableInternalId2googleTableId },
+		tableInternalId2published  => { map { $_->[0] => $_->[2] } @tableInternalId2googleTableId },
 	});
 
 	return $json;
@@ -433,7 +436,8 @@ sub get_dbh {
 			"DROP TABLE IF EXISTS $CONFIG->{index_table_name}",
 			"CREATE TABLE IF NOT EXISTS $CONFIG->{index_table_name} (
 				id INTEGER AUTO_INCREMENT PRIMARY KEY,
-				url VARCHAR(255)
+				url VARCHAR(255),
+				published TINYINT(1) DEFAULT 0
 			)",
 			"DROP TABLE IF EXISTS $CONFIG->{geosku_table_name}",
 			"CREATE TABLE IF NOT EXISTS $CONFIG->{geosku_table_name} (
@@ -466,17 +470,19 @@ sub get_initials {
 }
 
 # Because of https://developers.google.com/fusiontables/docs/v1/using#quota
+# ACONI, ACOP
 sub create_fusion_tables {
 	INFO 'Enter create_fusion_tables to compute the number of tables needed....';
 	my $self = shift;
 	my $skus = shift;
-	INFO 'We have ', scalar(@$skus), ' SKUs';
+	INFO 'We have ', scalar(@$skus), ' SKUs to publish';
 	if (scalar(@$skus) == 1) {
 		WARN 'One SKU, ', @$skus;
 	}
 	Izel::Table->RESET;
 	my $fusion_table_limit = shift || $FUSION_TABLE_LIMIT;
-	# Do this as bucket brigade
+
+	# TODO this as bucket brigade
 	my $sql = "SELECT COUNT(geo_id2) AS c, sku
 		FROM $CONFIG->{geosku_table_name}
 		WHERE merged_table_id IS NULL";
@@ -516,6 +522,7 @@ sub create_fusion_tables {
 		# Max 100,000 rows per table for queries
 		# TODO add count of data size < 250 MB per tble, < 1 GB in total,
 		# TODO If big record doesn't fit, find a smaller one.
+		INFO 'Record: ', Dumper($record);
 		if ($tables->[$table_index]->{count} + $record->[0] > $fusion_table_limit) {
 			$tables->[$table_index]->create();
 			$table_index ++;
@@ -527,7 +534,7 @@ sub create_fusion_tables {
 		);
 	}
 
-	INFO 'Leave create_fusion_tables';
+	INFO 'Leave create_fusion_tables after making ', $count;
 	return $tables;
 }
 
@@ -646,8 +653,8 @@ sub create {
 
 sub _update_skus_merged_table_id {
 	my $self = shift;
-	TRACE 'Enter _update_skus_merged_table_id';
 	$self->require_defined_fields('skus', 'merged_table_google_id');
+	TRACE 'Enter _update_skus_merged_table_id for ', $#{ $self->{skus}}, ' skus';
 	$self->{sth}->{create_merged_table_id} ||= $self->{dbh}->prepare_cached("
 		INSERT INTO $CONFIG->{index_table_name} (url) VALUES (?)
 	");
@@ -661,6 +668,7 @@ sub _update_skus_merged_table_id {
 	");
 
 	foreach my $sku (@{ $self->{skus}}) {
+		TRACE 'update_skus_merged_table_id ', $sku;
 		$self->{sth}->{update_skus_merged_table_id}->execute(
 			$self->{merged_table_id},
 			$sku
@@ -708,7 +716,7 @@ sub _create_table_on_google {
 	my $res = $self->_post_blob( $CONFIG->{endpoints}->{_create_table_on_google}, $table );
 	LOGCONFESS 'No content.tableId from Google when creating table? Res='.(Dumper $res) if not $res->{content}->{tableId};
 	$self->{table_id} = $res->{tableId} = $res->{content}->{tableId};
-	INFO "Created empty table ID ", $self->{table_id}, ' ', $self->{name};
+	INFO "Created empty table ID / name: ", $self->{table_id}, ' / ', $self->{name};
 	TRACE Dumper $res;
 	return $res;
 }
@@ -809,7 +817,6 @@ sub _populate_table_on_google {
 
 	my $statements = 0;	# Up to 500 INSERTs
 	my $gsql = '';
-	my @res;
 
 	foreach my $sku (@{ $self->{skus} }) {
 		INFO 'SKU: ', $sku;
@@ -825,10 +832,9 @@ sub _populate_table_on_google {
 		}
 	}
 	TRACE 'Call final insert';
-	push @res, $self->_execute_gsql($gsql);
+	$self->_execute_gsql($gsql);
 	DEBUG "Inserted all rows,\nleaving _populate_table_on_google for $self->{name}";
-	TRACE Dumper \@res;
-	return @res;
+	return 1;
 }
 
 
@@ -854,8 +860,8 @@ sub _create_merge {
 	TRACE $gsql;
 	my $res = $self->_execute_gsql($gsql);
 	if ($res->{content} and $res->{content}->{rows}) {
-		$self->{merged_table_google_id} = $res->{content}->{rows}->[0]->[0];
-		INFO "Created merged table ".$self->{name};
+		$self->{table_id} = $self->{merged_table_google_id} = $res->{content}->{rows}->[0]->[0];
+		INFO "Created merged table", join ' ', $self->{name}, $self->{merged_table_google_id}, $self->{table_id};
 	} else {
 		LOGCONFESS 'Unexpected response to gsql:', $gsql, "\nResponse:", Dumper $res;
 	}
