@@ -196,19 +196,22 @@
             })
         };
 
-        var publishFusionTable = async function(fileId, next) {
+        var publishFusionTable = async function(tableId, next) {
             // POST /drive/v2/files/<fusiontable_id or document_id>/permissions HTTP/1.1
             var response = await window.fetch(
-                'https://www.googleapis.com/drive/v2/files/' + fileId + '/permissions?' + authString(this.state.access_token),
-                {
-                    method: 'POST',
-                    body: JSON.stringify({"role": "reader","type": "anyone"}),
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    }
-                }
+                Config.endpoints.local + '?action=publish;'
+                    + authString(this.state.access_token)
+                    + ';tableId=' + tableId
             );
+                // 'https://www.googleapis.com/drive/v2/files/' + tableId + '/permissions?' + authString(this.state.access_token),
+                // {
+                //     method: 'POST',
+                //     body: JSON.stringify({"role": "reader","type": "anyone"}),
+                //     headers: {
+                //         'Accept': 'application/json',
+                //         'Content-Type': 'application/json'
+                //     }
+                // }
             var json = await response.json();
             console.log(json);
             if (next) {
@@ -235,7 +238,6 @@
         }
 
         var pagePreviewDbAfterRender = async function () {
-            console.log('tableInternalId2googleTableId', this.state.tableInternalId2googleTableId instanceof Array);
             Object.keys(this.state.tableInternalId2googleTableId).forEach( (iId) => {
                 this.callAsMethod('setCssClass', iId, this.state.tableInternalId2published[iId]);
             });
@@ -243,9 +245,10 @@
             if (! this.el.publishTables){
                 this.el.publishTables = document.getElementById('publish-tableInternalId2googleTableId');
                 this.el.publishTables.addEventListener('click', () => {
+                    console.log('Publish: ', this.state.googleTableId2published);
                     Object.keys( this.state.googleTableId2published ).forEach( async (tableId) => {
                         if (this.state.googleTableId2published[tableId] === 0) {
-                            console.log('Publish ', this.state.googleTableId2published[tableId]);
+                            console.log('Publish ', tableId);
                             this.callAsMethod('publishFusionTable', tableId);
                         } else {
                             console.log('Have already published ', tableId);
@@ -256,7 +259,7 @@
         }
 
         var viewIndex = function (json) {
-            console.log('_____________', JSON.stringify(json, undefined, 4));
+            console.log('___________________________\n', JSON.stringify(json, undefined, 4));
             Object.keys(json).forEach( (key) => {
                 this.state[key] = json[key];
             });
@@ -592,7 +595,7 @@
         <p>
             <button id='publish-tableInternalId2googleTableId'>Publish all Fusion Tables</button>
         </p>
-        <h4>Created Fusion Tables</h4>
+        <h4>Google Fusion Tables</h4>
         <ul>
             {{#each wizard.state.tableInternalId2googleTableId}}
                 <li><a class='FT_{{@key}}' target='_new' href='https://fusiontables.google.com/DataSource?docid={{this}}'>{{this}}</a></li>
@@ -601,7 +604,8 @@
         <h3>SKU Maps</h3>
         <ul class='skus'>
             {{#each wizard.state.sku2tableInternalId}}
-                <li><a class='FT_{{lookup /wizard.state.sku2tableInternalId this}}' target='_new' href='preview-map.html#{{@key}}' title='In {{this}}'>{{@key}}</a></li>
+                <!-- if lookup tableInternalId2published this  -->
+                <li><a class='FT_{{this}}' target='_new' href='preview-map.html#{{@key}}' title='In {{this}}'>{{@key}}</a></li>
             {{/each}}
         </ul>
     </script>

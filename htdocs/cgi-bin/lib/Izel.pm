@@ -192,10 +192,30 @@ sub new {
 	}
 
 	$self = bless $self, ref($inv) ? ref($inv) : $inv;
-
 	$self->get_dbh;
-
 	return $self;
+}
+
+sub publish_json {
+    my $self = shift;
+    my $args = ref($_[0])? shift : {@_};
+	DEBUG 'Enter publish';
+	my $res = Izel::Table->new(
+		map { $_ => $self->{$_} } qw/ auth_token auth_string jsoner dbh ua/
+	)->_post_blob(
+		'https://www.googleapis.com/drive/v2/files/' . $args->{tableId} . '/permissions?',
+		{
+			role => "reader",
+			type => "anyone"
+		}
+	);
+	$self->{dbh}->do(
+		"UPDATE $CONFIG->{index_table_name} SET published = 1 WHERE url = ?",
+		{},
+		$args->{tableId}
+	);
+	$self->{dbh}->commit();
+	return $self->{jsoner}->encode($res);
 }
 
 sub upload_db {

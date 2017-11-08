@@ -43,6 +43,16 @@ if ($cgi->param('action') eq 'status'){
     )->status_json();
 }
 
+elsif ($cgi->param('action') eq 'publish'){
+    logging();
+    print "content-type:application/json\n\n";
+    print Izel->new(
+        auth_string         => $ENV{QUERY_STRING},
+    )->publish_json(
+        tableId            => $cgi->param('tableId')
+    );
+}
+
 elsif ($cgi->param('action') eq 'upload-db'){
     real_time_html();
     INFO "Will upload the file...";
