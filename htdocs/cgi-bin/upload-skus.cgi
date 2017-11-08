@@ -104,15 +104,6 @@ elsif ($cgi->param('action') eq 'resume-previous') {
     INFO "Finished - you can now leave this screen";
 }
 
-elsif ($cgi->param('action') eq 'restart-previous') {
-    real_time_html('DEBUG');
-    INFO "Will restart the previous upload...";
-    Izel->new(
-        auth_string         => $ENV{QUERY_STRING},
-    )->restart_previous();
-    INFO "Finished - you can now leave this screen";
-}
-
 elsif ($cgi->param('action') eq 'preview-db') {
     logging('DEBUG');
     print "Content-type: application/json\n\n",

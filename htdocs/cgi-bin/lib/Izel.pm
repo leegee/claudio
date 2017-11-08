@@ -557,18 +557,6 @@ sub create_fusion_tables {
 	return $tables;
 }
 
-sub restart_previous {
-	my $self = shift;
-	$self->{dbh}->commit();
-	return $self->tables_from_db();
-}
-
-# Upload all skus without a merged_table_id;
-sub resume_previous {
-	my $self = shift;
-	return $self->tables_from_db();
-}
-
 sub wipe_google_tables {
 	TRACE 'Enter';
 	my $self = shift;

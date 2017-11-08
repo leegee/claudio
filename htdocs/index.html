@@ -114,7 +114,7 @@
             }, false);
         }
 
-        var pageCgiSomeSkusBeforeRender = async function () {
+        var pagePublishSomeSkusBeforeRender = async function () {
             this.state.skusToProcess = document.getElementById('skusToProcess').value;
         };
 
@@ -156,9 +156,11 @@
         */
         var cgi = async function (args) {
             return new Promise((resolve, reject) => {
-                if (! args || !args.action) {
-                    throw new Error('No args.action?');
+                if (! args || !args.action || !args.logWindowId) {
+                    throw new Error('No args, action || logWindowId?');
                 }
+
+                console.log('Log to ', args.logWindowId);
 
                 var buffer = '',
                     data = new FormData(),
@@ -196,22 +198,6 @@
                 request.send(data);
             });
         }
-
-        var pageRestartPreviousAfterRender = function () {
-            this.callAsMethod('cgi', {
-                action: 'restart-previous',
-                logWindowId: 'restart-previous-log'
-                // nextPage: 'menu', // 'review-specific-index'
-            })
-        };
-
-        var pageResumePreviousAfterRender = async function () {
-            this.callAsMethod('cgi', {
-                action: 'resume-previous',
-                logWindowId: 'resume-previous-log'
-                // nextPage: 'menu' // 'review-specific-index'
-            })
-        };
 
         var publishFusionTable = async function(tableId, next) {
             // POST /drive/v2/files/<fusiontable_id or document_id>/permissions HTTP/1.1
@@ -318,13 +304,6 @@
         //     var json = await response.json();
         //     this.callAsMethod(viewIndex, json);
         //     console.log('Leave pageReviewSpecificIndexBeforeRender with ', this.state.skus2ids)
-        // }
-
-        // // Relies upon server auto-indexing (NB .htaccess created in Izel.pm)
-        // var pageReviewIndexesBeforeRender = async function () {
-        //     var response = await window.fetch( this.state.indexBaseDir );
-        //     var text = await response.text();
-        //     this.state.indexes = _linksFromText(text);
         // }
 
         var _linksFromText = function (str) {
@@ -561,14 +540,8 @@
             map page will seem them in the database.
         </p>
         <ul>
-            <!--
-                <li data-goto-page='select-some-skus'>Publish some SKUs</lia>
-                <li data-goto-page='resume-previous'>Create maps for new SKUs</lia>
-                <li data-goto-page='restart-previous'>Restart the last job</lia>
-                <li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li>
-            -->
-         <li data-goto-page='select-some-skus'>Create maps for some SKUs (prepare some stock)</lia>
-         <li data-goto-page='preview-db'>Publish uploaded SKUs (publish some prepared stock)</li>
+            <li data-goto-page='select-some-skus'>Create maps for some SKUs (prepare some stock)</lia>
+            <li data-goto-page='preview-db'>Publish uploaded SKUs (publish some prepared stock)</li>
         </ul>
         <ul>
             <li data-goto-page='wipe-google-data'>Wipe Fusion Table data.</li>
@@ -633,12 +606,12 @@
             <textarea id='skusToProcess' name='skusToProcess'></textarea>
         </p>
         <p>
-            <button data-goto-page='cgi-some-skus'>Proceed</button>
+            <button data-goto-page='publish-some-skus'>Proceed</button>
     </script>
 
-    <script type='text/handlebars' id='cgi-some-skus'>
+    <script type='text/handlebars' id='publish-some-skus'>
         <h2>Working on some SKUs</h2>
-        <div class='log-window' id='cgi-some-skus-log'><p>Publishing some SKUs.</p></div>
+        <div class='log-window' id='publish-some-skus-log'><p>Publishing some SKUs.</p></div>
     </script>
 
     <script type='text/handlebars' id='publish-tables-and-skus'>
