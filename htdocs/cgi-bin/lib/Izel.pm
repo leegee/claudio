@@ -320,6 +320,7 @@ sub preview_db {
 		sku2tableInternalId => { map { $_->[0] => $_->[2] } @skus2table_ids },
 		tableInternalId2googleTableId  => { map { $_->[0] => $_->[1] } @tableInternalId2googleTableId },
 		tableInternalId2published  => { map { $_->[0] => $_->[2] } @tableInternalId2googleTableId },
+		googleTableId2published  => { map { $_->[1] => $_->[2] } @tableInternalId2googleTableId },
 	});
 
 	return $json;

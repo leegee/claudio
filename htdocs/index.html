@@ -21,6 +21,8 @@
         var Config, Config_Url = 'Config.js';
 
         var ENTER = async function () {
+            console.log('ENTER');
+
             var _ = await window.fetch(Config_Url);
             Config = await _.json();
             gapi.load('client:auth2', initClient);
@@ -72,15 +74,13 @@
                     return res.json();
                 }).then( (json) => {
                     console.table(json);
-                    this.el.statusPublished.innerHTML = Number(json.numberOfPublishedSkus).toLocaleString();
-                    this.el.statusTotal.innerHTML = Number(json.numberOfTotalSkus).toLocaleString();
+                    try {
+                        document.getElementById('number-of-published-skus').innerHTML = Number(json.numberOfPublishedSkus).toLocaleString();
+                        document.getElementById('number-of-total-skus').innerHTML = Number(json.numberOfTotalSkus).toLocaleString();
+                    } catch (e) {}
                 });
             }
-
-            this.el.statusPublished = this.el.statusPublished || document.getElementById('number-of-published-skus');
-            this.el.statusTotal = this.el.statusTotal || document.getElementById('number-of-total-skus');
-            this.el.status = this.el.status || document.getElementById('status');
-            this.el.status.addEventListener('click', () => {
+            document.getElementById('status').addEventListener('click', () => {
                 this.updateStatus();
             })
             this.updateStatus();
@@ -154,6 +154,8 @@
                 }
             ;
 
+            logwindow.setAttribute('style', 'position: relative; overflow: auto; height: 100%; font-family: monospace; white-space: pre; ');
+
             for (key in args) {
                 data.append( key, args[key] );
             }
@@ -194,15 +196,6 @@
             })
         };
 
-        var pagePreviewDbBeforeRender = async function () {
-            console.log('Load ', Config.endpoints.previewDb);
-            var response = await window.fetch(
-                Config.endpoints.previewDb
-            );
-            var json = await response.json();
-            this.callAsMethod(viewIndex, json);
-        };
-
         var publishFusionTable = async function(fileId, next) {
             // POST /drive/v2/files/<fusiontable_id or document_id>/permissions HTTP/1.1
             var response = await window.fetch(
@@ -223,56 +216,75 @@
             }
         };
 
+        var pagePreviewDbBeforeRender = async function () {
+            var response = await window.fetch(
+                Config.endpoints.local + '?action=preview-db'
+            );
+            var json = await response.json();
+            this.callAsMethod(viewIndex, json);
+        };
+
+        var setCssClass = function (internalTableId, isPublished) {
+            var style = document.createElement('style');
+            style.type = 'text/css';
+            document.getElementsByTagName('head')[0].appendChild(style);
+            var str = 'FT_' + internalTableId + '::before { content: "'
+            +  (internalTableId === 0 ? '☑' : '☐')
+            + '"}';
+            style.sheet.insertRule( str, 0 );
+        }
+
         var pagePreviewDbAfterRender = async function () {
+            console.log('tableInternalId2googleTableId', this.state.tableInternalId2googleTableId instanceof Array);
+            Object.keys(this.state.tableInternalId2googleTableId).forEach( (iId) => {
+                this.callAsMethod('setCssClass', iId, this.state.tableInternalId2published[iId]);
+            });
+
             if (! this.el.publishTables){
                 this.el.publishTables = document.getElementById('publish-tableInternalId2googleTableId');
                 this.el.publishTables.addEventListener('click', () => {
-                    Object.keys( this.state.tableInternalId2googleTableId ).forEach( async (iId) => {
-                        this.callAsMethod('publishFusionTable', this.state.tableInternalId2googleTableId[iId]);
+                    Object.keys( this.state.googleTableId2published ).forEach( async (tableId) => {
+                        if (this.state.googleTableId2published[tableId] === 0) {
+                            console.log('Publish ', this.state.googleTableId2published[tableId]);
+                            this.callAsMethod('publishFusionTable', tableId);
+                        } else {
+                            console.log('Have already published ', tableId);
+                        }
                     });
                 });
             }
         }
 
         var viewIndex = function (json) {
-            this.state.skus2ids = [];
-            for (var sku in json.sku2tableInternalId) {
-                this.state.skus2ids.push({
-                    sku,
-                    id: json.tableInternalId2googleTableId[ json.sku2tableInternalId[sku] ]
-                });
-            }
-            var ids = {};
-            for (var id in json.tableInternalId2googleTableId) {
-                var googleTableId = json.tableInternalId2googleTableId[id];
-                ids[googleTableId] ++;
-            }
-            this.state.tableInternalId2googleTableId = Object.keys(ids).sort();
+            console.log('_____________', JSON.stringify(json, undefined, 4));
+            Object.keys(json).forEach( (key) => {
+                this.state[key] = json[key];
+            });
         };
 
-        var pageReviewSpecificIndexBeforeRender = async function (e) {
-            if (e instanceof Array) {
-                e = e[0]
-            }
-            if (typeof e === 'string') {
-                this.state.jobName = e;
-            } else {
-                // Called by click event
-                this.state.jobName = ('/' + this.state.indexBaseDir + '/' + e.target.innerText).replace(/\/+/g, '/');
-            }
-            var url = (this.state.jobName + '/index.js').replace(/\/+/g, '/');
-            var response = await window.fetch(url);
-            var json = await response.json();
-            this.callAsMethod(viewIndex, json);
-            console.log('Leave pageReviewSpecificIndexBeforeRender with ', this.state.skus2ids)
-        }
+        // var pageReviewSpecificIndexBeforeRender = async function (e) {
+        //     if (e instanceof Array) {
+        //         e = e[0]
+        //     }
+        //     if (typeof e === 'string') {
+        //         this.state.jobName = e;
+        //     } else {
+        //         // Called by click event
+        //         this.state.jobName = ('/' + this.state.indexBaseDir + '/' + e.target.innerText).replace(/\/+/g, '/');
+        //     }
+        //     var url = (this.state.jobName + '/index.js').replace(/\/+/g, '/');
+        //     var response = await window.fetch(url);
+        //     var json = await response.json();
+        //     this.callAsMethod(viewIndex, json);
+        //     console.log('Leave pageReviewSpecificIndexBeforeRender with ', this.state.skus2ids)
+        // }
 
-        // Relies upon server auto-indexing (NB .htaccess created in Izel.pm)
-        var pageReviewIndexesBeforeRender = async function () {
-            var response = await window.fetch( this.state.indexBaseDir );
-            var text = await response.text();
-            this.state.indexes = _linksFromText(text);
-        }
+        // // Relies upon server auto-indexing (NB .htaccess created in Izel.pm)
+        // var pageReviewIndexesBeforeRender = async function () {
+        //     var response = await window.fetch( this.state.indexBaseDir );
+        //     var text = await response.text();
+        //     this.state.indexes = _linksFromText(text);
+        // }
 
         var _linksFromText = function (str) {
             var m,
@@ -355,7 +367,6 @@
         }
 
         Wizard.prototype.callAsMethod = function (method, ...args) {
-            console.log('callAsMethod ', method, args);
             if (typeof method === 'string') {
                 method = window[method];
             }
@@ -438,6 +449,10 @@
             }
         };
 
+        Handlebars.registerHelper('skuClass', function(tableInternalId) {
+            return new Handlebars.SafeString('FT_' + this.state.tableInternalId2published[tableInternalId]);
+        });
+
         // {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
         Handlebars.registerHelper('wizardIncludeTemplate', function(templateId) {
             var html = Handlebars.compile(
@@ -447,10 +462,6 @@
             );
             return new Handlebars.SafeString(html);
         });
-
-        // Wizard.prototype.includeTemplate = function () {
-        //     console.log('-------', this);
-        // }
 
         Wizard.prototype.render = function () {
             console.log('Enter render');
@@ -465,14 +476,15 @@
                 )(
                     { wizard: this }
                 );
+                window.scrollTo(0,0);
                 var links = document.querySelectorAll('[data-goto-page]');
                 for (var el of links) {
                     el.setAttribute('style',
                         el.getAttribute('style') + ';cursor:pointer;'
                     );
-                    el.onclick = (e) => {
+                    el.onclick = async (e) => {
                         this.show('spinner');
-                        this.nextPage(e.target.dataset.gotoPage, e);
+                        await this.nextPage(e.target.dataset.gotoPage, e);
                         this.hide('spinner');
                     };
                 };
@@ -498,16 +510,16 @@
 
     <script type='text/handlebars' id='menu'>
         <div id='status'>
-            Published <span id='number-of-published-skus'>[click to update]</span> of
-            <span id='number-of-total-skus'>[click to update]</span> known SKUs.
+            Published <span id='number-of-published-skus'>[-]</span> of
+            <span id='number-of-total-skus'>[-]</span> known SKUs.
         </div>
         <ul>
             <!--
-            <li data-goto-page='select-some-skus'>Publish some SKUs</lia>
-            <li data-goto-page='resume-previous'>Create maps for new SKUs</lia>
-            <li data-goto-page='restart-previous'>Restart the last job</lia>
-            <li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li>
-         -->
+                <li data-goto-page='select-some-skus'>Publish some SKUs</lia>
+                <li data-goto-page='resume-previous'>Create maps for new SKUs</lia>
+                <li data-goto-page='restart-previous'>Restart the last job</lia>
+                <li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li>
+            -->
          <li data-goto-page='select-some-skus'>Create maps for some SKUs</lia>
          <li data-goto-page='preview-db'>Publish uploaded SKUs</li>
         </ul>
@@ -530,7 +542,7 @@
         <h2>Upload SKU Geography</h2>
         <div id='selectCsv'>
             <p><label for='skusCsv'>From your local machine, select the CSV file that maps all SKU to all FIPS.</label></p>
-            <p>Later, you can choose for which SKU to publish maps.</p>
+            <p>Later, you can choose for which SKU to create maps.</p>
             <p><input type='file' name='skusCsv' id='skusCsv' placeholder='SKUs CSV' type='.csv'></p>
         </div>
     </script>
@@ -580,28 +592,25 @@
         <p>
             <button id='publish-tableInternalId2googleTableId'>Publish all Fusion Tables</button>
         </p>
+        <h4>Created Fusion Tables</h4>
         <ul>
-            {{#wizard.state.tableInternalId2googleTableId}}
-                <li><a id='tableId' target='_new' href='https://fusiontables.google.com/DataSource?docid={{.}}'>{{.}}</a></li>
-            {{/wizard.state.tableInternalId2googleTableId}}
+            {{#each wizard.state.tableInternalId2googleTableId}}
+                <li><a class='FT_{{@key}}' target='_new' href='https://fusiontables.google.com/DataSource?docid={{this}}'>{{this}}</a></li>
+            {{/each}}
         </ul>
-        <h3>SKU Map Previews</h3>
+        <h3>SKU Maps</h3>
         <ul class='skus'>
-            {{#wizard.state.skus2ids}}
-                <li>
-                    <a target='_new' href='preview-map.html#{{sku}}'>
-                        {{sku}}
-                    </a>
-                </li>
-            {{/wizard.state.skus2ids}}
+            {{#each wizard.state.sku2tableInternalId}}
+                <li><a class='FT_{{lookup /wizard.state.sku2tableInternalId this}}' target='_new' href='preview-map.html#{{@key}}' title='In {{this}}'>{{@key}}</a></li>
+            {{/each}}
         </ul>
     </script>
 
     <script type='text/handlebars' id='preview-db'>
-        <h2>SKUs So Far</h2>
         {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
     </script>
 
+    <!--
     <script type='text/handlebars' id='restart-previous'>
         <h2>Creating Maps</h2>
         <div id='log-window'><p>Resuming the previous job from scratch.</p></div>
@@ -612,30 +621,10 @@
         <div id='log-window'><p>Resuming the previous job.</p></div>
     </script>
 
-    <script type='text/handlebars' id='review-indexes'>
-        <h2>Please select an index</h2>
-        {{window.wizard.state.indexes}}
-        <ul>
-            {{#wizard.state.indexes}}
-                <li data-goto-page='review-specific-index'>{{.}}</li>
-            {{/wizard.state.indexes}}
-        </ul>
-    </script>
-
-    <script type='text/handlebars' id='no-indexes'>
-        <h2>There are no indexes.</h2>
-        <p>Please upload some SKU/geography.</h2>
-    </script>
-
     <script type='text/handlebars' id='review-some-skus'>
-        <h2>Your New SKU Maps</h2>
         {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
     </script>
-
-    <script type='text/handlebars' id='review-specific-index'>
-        <h2>{{wizard.state.jobName}}</h2>
-        {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
-    </script>
+    -->
 
 </head>
 
