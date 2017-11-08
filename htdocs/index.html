@@ -114,7 +114,7 @@
             }, false);
         }
 
-        var pagePublishSomeSkusBeforeRender = async function () {
+        var pageMapSomeSkusBeforeRender = async function () {
             this.state.skusToProcess = document.getElementById('skusToProcess').value;
         };
 
@@ -127,9 +127,9 @@
 
         var pageCgiSomeSkusAfterRender = async function () {
             this.callAsMethod('cgi', {
-                'action': 'publish-some-skus',
+                'action': 'map-some-skus',
                 'skus-text': this.state.skusToProcess,
-                logWindowId: 'publish-some-skus-log'
+                logWindowId: 'map-some-skus-log'
             });
         };
 
@@ -606,12 +606,12 @@
             <textarea id='skusToProcess' name='skusToProcess'></textarea>
         </p>
         <p>
-            <button data-goto-page='publish-some-skus'>Proceed</button>
+            <button data-goto-page='map-some-skus'>Proceed</button>
     </script>
 
-    <script type='text/handlebars' id='publish-some-skus'>
+    <script type='text/handlebars' id='map-some-skus'>
         <h2>Working on some SKUs</h2>
-        <div class='log-window' id='publish-some-skus-log'><p>Publishing some SKUs.</p></div>
+        <div class='log-window' id='map-some-skus-log'><p>Publishing some SKUs.</p></div>
     </script>
 
     <script type='text/handlebars' id='publish-tables-and-skus'>

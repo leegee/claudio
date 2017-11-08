@@ -84,7 +84,7 @@ elsif ($cgi->param('action') eq 'wipe-google-data') {
     INFO "Finished - you can now leave this screen";
 }
 
-elsif ($cgi->param('action') eq 'publish-some-skus') {
+elsif ($cgi->param('action') eq 'map-some-skus') {
     real_time_html('DEBUG');
     INFO "Will publish some skus...";
     Izel->new(
