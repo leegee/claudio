@@ -89,7 +89,7 @@ sub map_some_skus {
 
 	if (not scalar @skus_todo) {
 		unshift @msg, 'There are no SKUs from your supplied list that can be published.\n\n';
-		LOGDIE join "\n\n", @msg;
+		LOGDIE join("\n\n", @msg, "\n");
 	}
 
 	INFO join '\n\n', @msg;
