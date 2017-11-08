@@ -35,6 +35,7 @@
                 'clientId': Config.clientId,
                 'scope': Config.scopes.join(' ')
             }).then(function () {
+                document.getElementById('spinner').setAttribute('style', 'display:none');
                 GoogleAuth = gapi.auth2.getAuthInstance();
                 GoogleAuth.isSignedIn.listen(updateSigninStatus);
                 setSigninStatus();
@@ -93,6 +94,10 @@
             return (await response.json()).items;
         }
 
+        var pageSelectSomeSkusAfterRender = function () {
+            // alert(123);
+        }
+
         var pageSelectAugmentDbAfterRender = async function () {
             document.getElementById('skusCsvAugment').addEventListener('change', (e) => {
                 this.state.file = e.target.files[0];
@@ -131,8 +136,8 @@
         var pageUploadDbAfterRender = function () {
             this.callAsMethod('cgi', {
                 'action': 'upload-db',
-                'skus-file': this.state.file,
-                'nextPage': 'menu' // 'review-specific-index'
+                'skus-file': this.state.file
+                // 'nextPage': 'menu' // 'review-specific-index'
             })
         };
 
@@ -140,59 +145,59 @@
         * Before the cx closes, server will respond with HTML status updates.
         */
         var cgi = async function (args) {
-            if (! args || !args.action) {
-                throw new Error('No args.action?');
-            }
-
-            var buffer = '',
-                data = new FormData(),
-                logwindow = document.getElementById('log-window'),
-                request = new XMLHttpRequest(),
-                show = (html) => {
-                    logwindow.innerHTML = html;
-                    logwindow.scrollTop = logwindow.scrollHeight + logwindow.clientHeight;
+            return new Promise((resolve, reject) => {
+                if (! args || !args.action) {
+                    throw new Error('No args.action?');
                 }
-            ;
 
-            logwindow.setAttribute('style', 'position: relative; overflow: auto; height: 100%; font-family: monospace; white-space: pre; ');
-
-            for (key in args) {
-                data.append( key, args[key] );
-            }
-
-            request.onreadystatechange = () => {
-                if (request.responseText.length) {
-                    show(request.responseText);
-                }
-                if (request.readyState === XMLHttpRequest.DONE) {
-                    if (request.status === 200) {
-                        if (args.nextPage) {
-                            window.wizard.nextPage(args.nextPage, this.state.indexJsDir);
-                        }
-                        return Promise.resolve();
-                    } else {
-                        console.error(request);
-                        return Promise.reject(request.status);
+                var buffer = '',
+                    data = new FormData(),
+                    logwindow = document.getElementById('log-window'),
+                    request = new XMLHttpRequest(),
+                    show = (html) => {
+                        logwindow.innerHTML = html;
+                        logwindow.scrollTop = logwindow.scrollHeight + logwindow.clientHeight;
                     }
-                } else {
-                    console.error('Not ready', request.readyState, request.responseText);
+                ;
+
+                // logwindow.setAttribute('style', '   overflow:scroll; height: 20em; font-family: monospace; white-space: pre; ');
+
+                for (key in args) {
+                    data.append( key, args[key] );
                 }
-            }
-            request.open('POST', Config.endpoints.uploadDb + '?' + authString(this.state.access_token));
-            request.send(data);
+
+                request.onreadystatechange = () => {
+                    if (request.responseText.length) {
+                        show(request.responseText);
+                    }
+                    if (request.readyState === XMLHttpRequest.DONE) {
+                        if (request.status === 200) {
+                            if (args.nextPage) {
+                                window.wizard.nextPage(args.nextPage, this.state.indexJsDir);
+                            }
+                            resolve();
+                        } else {
+                            console.error(request);
+                            reject(request.status);
+                        }
+                    }
+                }
+                request.open('POST', Config.endpoints.uploadDb + '?' + authString(this.state.access_token));
+                request.send(data);
+            });
         }
 
         var pageRestartPreviousAfterRender = function () {
             this.callAsMethod('cgi', {
                 action: 'restart-previous',
-                nextPage: 'menu', // 'review-specific-index'
+                // nextPage: 'menu', // 'review-specific-index'
             })
         };
 
         var pageResumePreviousAfterRender = async function () {
             this.callAsMethod('cgi', {
                 action: 'resume-previous',
-                nextPage: 'menu' // 'review-specific-index'
+                // nextPage: 'menu' // 'review-specific-index'
             })
         };
 
@@ -238,23 +243,40 @@
         }
 
         var pagePreviewDbAfterRender = async function () {
+            var todo = 0;
             Object.keys(this.state.tableInternalId2googleTableId).forEach( (iId) => {
+                if (this.state.tableInternalId2published[iId]===1) {
+                    todo++;
+                }
                 this.callAsMethod('setCssClass', iId, this.state.tableInternalId2published[iId]);
             });
 
+            if (! todo) {
+                var el = document.getElementById('publish-tableInternalId2googleTableId');
+                el.outerHTML = '';
+                delete el;
+            }
+
             if (! this.el.publishTables){
                 this.el.publishTables = document.getElementById('publish-tableInternalId2googleTableId');
-                this.el.publishTables.addEventListener('click', () => {
-                    console.log('Publish: ', this.state.googleTableId2published);
-                    Object.keys( this.state.googleTableId2published ).forEach( async (tableId) => {
-                        if (this.state.googleTableId2published[tableId] === 0) {
-                            console.log('Publish ', tableId);
-                            this.callAsMethod('publishFusionTable', tableId);
-                        } else {
-                            console.log('Have already published ', tableId);
-                        }
+                if (this.el.publishTables) {
+                    this.el.publishTables.addEventListener('click', () => {
+                        var promises = [];
+                        this.el.publishTables.disabled = true;
+                        console.log('Publish: ', this.state.googleTableId2published);
+                        Object.keys( this.state.googleTableId2published ).forEach( async (tableId) => {
+                            if (this.state.googleTableId2published[tableId] === 0) {
+                                console.log('Publish ', tableId);
+                                promises.push(this.callAsMethod('publishFusionTable', tableId));
+                            } else {
+                                console.log('Have already published ', tableId);
+                            }
+                        });
+                        Promise.all(promises).then( () => {
+                            alert('Published ' + promises.length + ' tables');
+                        })
                     });
-                });
+                }
             }
         }
 
@@ -516,6 +538,12 @@
             Published <span id='number-of-published-skus'>[-]</span> of
             <span id='number-of-total-skus'>[-]</span> known SKUs.
         </div>
+        <p>
+            This program allows you to create a database of FIPs and SKUS,
+            from which you can create Google Fusion Tables, which you
+            must then choose to publish. Once published, they site's main
+            map page will seem them in the database.
+        </p>
         <ul>
             <!--
                 <li data-goto-page='select-some-skus'>Publish some SKUs</lia>
@@ -523,11 +551,11 @@
                 <li data-goto-page='restart-previous'>Restart the last job</lia>
                 <li data-goto-page='review-indexes'>Publish previously uploaded SKU geography</li>
             -->
-         <li data-goto-page='select-some-skus'>Create maps for some SKUs</lia>
-         <li data-goto-page='preview-db'>Publish uploaded SKUs</li>
+         <li data-goto-page='select-some-skus'>Create maps for some SKUs (prepare some stock)</lia>
+         <li data-goto-page='preview-db'>Publish uploaded SKUs (publish some prepared stock)</li>
         </ul>
         <ul>
-            <li data-goto-page='select-augment-db'>Add another SKU-geography CSV.</lia>
+            <li data-goto-page='select-augment-db'>Add another SKU-geography CSV (update distributions)</lia>
             <li data-goto-page='select-skus'>Start again - wipe the DB, delete all Fusion Tables, and upload a new SKU-geography CSV.</lia>
         </ul>
     </script>
@@ -576,6 +604,7 @@
         <p>
             <label for='skusToProcess'>Please enter a list of USDA symbols/SKUs to proceess.
                 Separate mulitple values with non-alphanumeric characters (comma, space, bar, etc).
+                You will be informed of duplicate and invalid SKUs.
             </label>
         </p>
         <p>
@@ -671,7 +700,7 @@
         <script src="https://www.google-analytics.com/analytics.js" async defer></script>
         -->
 
-        <div id="spinner" class="loader" style="display:none">Loading...</div>
+        <div id="spinner" class="loader">Loading...</div>
         <script async defer src="https://apis.google.com/js/api.js" onload="this.onload=function(){};ENTER()" onreadystatechange="if (this.readyState === 'complete') this.onload()">
         </script>
     </body>

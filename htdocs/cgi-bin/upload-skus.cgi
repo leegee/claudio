@@ -54,7 +54,7 @@ elsif ($cgi->param('action') eq 'publish'){
 }
 
 elsif ($cgi->param('action') eq 'upload-db'){
-    real_time_html();
+    real_time_html('INFO');
     INFO "Will upload the file...";
     Izel->new(
         auth_string         => $ENV{QUERY_STRING},
@@ -65,7 +65,7 @@ elsif ($cgi->param('action') eq 'upload-db'){
 }
 
 elsif ($cgi->param('action') eq 'augment-db'){
-    real_time_html();
+    real_time_html('INFO');
     INFO "Will upload the file...";
     Izel->new(
         auth_string         => $ENV{QUERY_STRING},
@@ -76,18 +76,18 @@ elsif ($cgi->param('action') eq 'augment-db'){
 }
 
 elsif ($cgi->param('action') eq 'publish-some-skus') {
-    real_time_html();
+    real_time_html('DEBUG');
     INFO "Will publish some skus...";
     Izel->new(
         auth_string         => $ENV{QUERY_STRING},
-    )->process_some_skus(
+    )->map_some_skus(
         skus_text           => $cgi->param('skus-text') .'',
     );
     INFO "Finished - you can now leave this screen";
 }
 
 elsif ($cgi->param('action') eq 'resume-previous') {
-    real_time_html();
+    real_time_html('DEBUG');
     INFO "Will resume the previous upload...";
     Izel->new(
         auth_string         => $ENV{QUERY_STRING},
@@ -96,7 +96,7 @@ elsif ($cgi->param('action') eq 'resume-previous') {
 }
 
 elsif ($cgi->param('action') eq 'restart-previous') {
-    real_time_html();
+    real_time_html('DEBUG');
     INFO "Will restart the previous upload...";
     Izel->new(
         auth_string         => $ENV{QUERY_STRING},
@@ -105,7 +105,7 @@ elsif ($cgi->param('action') eq 'restart-previous') {
 }
 
 elsif ($cgi->param('action') eq 'preview-db') {
-    logging();
+    logging('DEBUG');
     print "Content-type: application/json\n\n",
         Izel->new()->preview_db();
     INFO "Finished - you can now leave this screen";
@@ -124,10 +124,11 @@ exit;
 
 
 sub real_time_html {
+    my $level = shift || 'INFO';
     print "Content-type: text/html\r\n\r\n";
     $|++;
-    Log::Log4perl->init(\'
-        log4perl.logger = TRACE, IzelApp, Screen
+    Log::Log4perl->init(\"
+        log4perl.logger = $level, IzelApp, Screen
         log4perl.appender.IzelApp = HtmlRealTime
         log4perl.appender.IzelApp.layout = PatternLayout
         log4perl.appender.IzelApp.layout.ConversionPattern = %d %m %n
@@ -135,7 +136,7 @@ sub real_time_html {
         log4perl.appender.Screen.stderr = 1
         log4perl.appender.Screen.layout = PatternLayout
         log4perl.appender.Screen.layout.ConversionPattern = %d %M LINE %L - %m %n
-    ');
+    ");
 }
 
 sub logging {

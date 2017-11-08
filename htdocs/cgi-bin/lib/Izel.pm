@@ -40,21 +40,31 @@ our $CONFIG = {
 	}
 };
 
-sub process_some_skus {
+sub map_some_skus {
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
 	INFO 'Enter process_some_skus:';
 	$args->{skus_text} ||= [];
     if ($args->{skus_text} and not ref $args->{skus_text}){
-        $args->{skus_text} = [ split(/[,\W]+/, $args->{skus_text}) ]
+        $args->{skus_text} = [ split(/[,\s]+/, $args->{skus_text}) ]
     }
     if (not scalar @{$args->{skus_text}}){
 		LOGDIE 'No skus-text supplied! '. Dumper($args->{skus_text});
 	}
-	INFO 'Got SKUs: ', join',',@{$args->{skus_text}};
+
+	$args->{skus_text} = [sort @{$args->{skus_text}}];
+
+	INFO 'Got ',
+		(1 + $#{$args->{skus_text}}),
+		' SKUs: ', join',',@{$args->{skus_text}};
+
+	INFO 'Checking validity and upload status';
 
 	my (@already_published, @skus_todo, @invalid_skus);
+	my $count = 0;
+
 	foreach my $sku (@{ $args->{skus_text} }){
+		$count ++;
 		if ($self->is_sku_valid($sku)){
 			if ($self->is_sku_published($sku)){
 				push(@already_published, $sku)
@@ -64,14 +74,17 @@ sub process_some_skus {
 		} else {
 			push @invalid_skus, uc $sku;
 		}
+		if ($count % 100 == 0) {
+			INFO 'Checked ', $count, '...';
+		}
 	}
 
-	my @msg;
+	my @msg = 'You supplied '. (1 + $#{$args->{skus_text}}). ' SKUs';
 	if (@invalid_skus) {
-		push @msg, 'The following SKUs are invalid: ', join",", @invalid_skus;
+		push @msg, 'The following '. (1+$#invalid_skus).' SKUs are invalid: ', join",", @invalid_skus;
 	}
 	if (@already_published) {
-		push @msg, 'The following SKUs are already public: ', join",", @already_published;
+		push @msg, 'The following '. (1+$#already_published). ' SKUs are already public: ', join",", @already_published;
 	}
 
 	if (not scalar @skus_todo) {
@@ -79,7 +92,7 @@ sub process_some_skus {
 		LOGDIE join "\n\n", @msg;
 	}
 
-	WARN join '\n\n', @msg;
+	INFO join '\n\n', @msg;
 
 	my @merged_table_google_ids;
 	my $tables = $self->create_fusion_tables( \@skus_todo );
@@ -90,22 +103,16 @@ sub process_some_skus {
 		push @merged_table_google_ids, $table->{merged_table_google_id};
 	}
 
-	if (@invalid_skus) {
-		ERROR 'The following SKUs are invalid: ', join",", @invalid_skus;
-	}
-	if (@already_published) {
-		INFO 'The following SKUs are already public: ', join",", @already_published;
-	}
-
 	$self->{dbh}->commit();
+	WARN join '\n\n', @msg;
 	return;
 }
 
 sub is_sku_valid {
 	my ($self, $sku) = @_;
-	my $sql = "SELECT sku FROM $CONFIG->{geosku_table_name} WHERE SKU = ? LIMIT 1";
-	$self->{sth}->{is_sku_valid} = $self->{dbh}->prepare($sql);
-	INFO $sql;
+	$self->{sth}->{is_sku_valid} ||= $self->{dbh}->prepare(
+		"SELECT sku FROM $CONFIG->{geosku_table_name} WHERE SKU = ? LIMIT 1"
+	);
 	return $self->{dbh}->selectall_array(
 		$self->{sth}->{is_sku_valid},
 		{},
@@ -115,7 +122,7 @@ sub is_sku_valid {
 
 sub is_sku_published {
 	my ($self, $sku) = @_;
-	$self->{sth}->{is_sku_published} = $self->{dbh}->prepare("
+	$self->{sth}->{is_sku_published} ||= $self->{dbh}->prepare("
 		SELECT sku, merged_table_id FROM $CONFIG->{geosku_table_name}
 		WHERE SKU = ? AND merged_table_id IS NOT NULL
 		LIMIT 1
@@ -144,7 +151,7 @@ sub copy_cgi_file {
 	my $skus_file_handle = shift;
     my $uploaded_sku_csv_path = 'latest_skus.csv';
     binmode $skus_file_handle;
-    TRACE 'Write uploaded skus to temp file at ', $uploaded_sku_csv_path;
+    INFO 'Write uploaded skus to temp file at ', $uploaded_sku_csv_path;
 
     open my $OUT,">:utf8", $uploaded_sku_csv_path or LOGDIE "$! - $uploaded_sku_csv_path";
 
@@ -157,19 +164,24 @@ sub copy_cgi_file {
 
     close $OUT;
     close $skus_file_handle;
-    TRACE 'Finished writing uploaded db to temp file';
+    INFO 'Finished writing uploaded db to temp file';
 	return $uploaded_sku_csv_path;
 }
 
 sub status_json {
 	my $self = shift;
 	my $res = {};
-	$res->{"numberOfTotalSkus"} = $self->{dbh}->selectall_arrayref(
-		"SELECT COUNT(DISTINCT sku) FROM $CONFIG->{geosku_table_name}"
-	)->[0]->[0];
-	$res->{"numberOfPublishedSkus"} = $self->{dbh}->selectall_arrayref(
-		"SELECT COUNT(DISTINCT sku) FROM $CONFIG->{geosku_table_name} WHERE merged_table_id IS NOT NULL"
-	)->[0]->[0];
+	eval {
+		$res->{"numberOfTotalSkus"} = $self->{dbh}->selectall_arrayref(
+			"SELECT COUNT(DISTINCT sku) FROM $CONFIG->{geosku_table_name}"
+		)->[0]->[0];
+		$res->{"numberOfPublishedSkus"} = $self->{dbh}->selectall_arrayref(
+			"SELECT COUNT(DISTINCT sku) FROM $CONFIG->{geosku_table_name} WHERE merged_table_id IS NOT NULL"
+		)->[0]->[0];
+	};
+	if ($@) {
+		$res = { error => $@ };
+	}
 	return $self->{jsoner}->encode( $res );
 }
 
@@ -225,8 +237,12 @@ sub upload_db {
 	LOGDIE 'No skus_file_handle' if not $args->{skus_file_handle};
 	my $uploaded_sku_csv_path = $self->copy_cgi_file($args->{skus_file_handle});
 
-	$self->wipe_google_tables();
-	$self->{dbh}->commit();
+	eval {
+		$self->wipe_google_tables();
+		$self->{dbh}->commit();
+	};
+
+	INFO 'Have reset the DB. Now ingesting...';
 
     my $jsonRes = Izel->new(
 		recreate_db			=> 1,
@@ -235,7 +251,7 @@ sub upload_db {
         skus2fips_csv_path  => $uploaded_sku_csv_path,
     );
 
-    TRACE 'Done';
+    INFO 'All Done: the database has been recreated from your CSV file.';
     return $jsonRes;
 }
 
@@ -256,19 +272,6 @@ sub augment_db {
     return $jsonRes;
 }
 
-sub lookup {
-	my ($self, $sku) = @_;
-	return $self->{dbh}->selectall_arrayref("
-		SELECT DISTINCT $CONFIG->{index_table_name}.url AS googleTableId,
-			$CONFIG->{geosku_table_name}.sku AS sku,
-			$CONFIG->{index_table_name}.id AS internalTableId
-		FROM $CONFIG->{geosku_table_name}
-		JOIN $CONFIG->{index_table_name}
-		ON $CONFIG->{geosku_table_name}.merged_table_id = $CONFIG->{index_table_name}.id
-		WHERE sku = ?
-	", {}, $sku)->[0][0];
-}
-
 sub create_from_csv {
 	TRACE "Enter Izel::create_from_csv";
 	my $self = shift;
@@ -278,7 +281,7 @@ sub create_from_csv {
 }
 
 sub db_from_csv {
-	TRACE "Enter Izel::db_from_csv";
+	INFO "Enter Izel::db_from_csv";
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
 	$self->{dbh}->commit();
@@ -348,19 +351,9 @@ sub preview_db {
 
 
 sub ingest_sku_from_csv {
-	TRACE 'Load GEO/SKU from CSV';
+	INFO 'Load GEO/SKU from CSV';
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
-
-	# if ($args->{include_only_skus}
-	# 	and ref $args->{include_only_skus}
-	# 	and ref $args->{include_only_skus} eq 'ARRAY'
-	# ) {
-	# 	$args->{include_only_skus} = { map { $_ => 1 } @{$args->{include_only_skus}} }
-	# } else {
-	# 	delete $args->{include_only_skus};
-	# }
-
 	$args->{separator} ||= ',';
 	$args->{commit_every} ||= 10_000;
 
@@ -394,13 +387,12 @@ sub ingest_sku_from_csv {
 		} else {
 			$fips = $row->[1];
 		}
+
 		# TRACE  "$fips -> $sku :: ", join",",@$row;
 		LOGDIE 'FIPS should be numeric, got a row [', join(', ', @$row), ']' if not $fips =~ /^\d+$/;
 		my $geo_id2 = $fips + 0;
-		# if (not($args->{include_only_skus}) or exists $args->{include_only_skus}->{$sku}){
-			$self->insert_geosku( $geo_id2, $sku );
-			$count ++;
-		# }
+		$self->insert_geosku( $geo_id2, $sku );
+		$count ++;
 
 		if ($count % $args->{commit_every} == 0) {
 			$self->{dbh}->commit();
@@ -434,6 +426,7 @@ sub _connect {
 		or LOGDIE "Cannot connect to local mysql with $user:$pass";
 
 	if ($self->{recreate_db}) {
+		INFO 'Drop and create DB';
 		$self->{dbh}->do("DROP DATABASE IF EXISTS $dbname") or LOGDIE "Cannot create database geosku"; # XXX
 		$self->{dbh}->do("CREATE DATABASE IF NOT EXISTS $dbname") or LOGDIE "Cannot create database geosku";
 	}
@@ -453,25 +446,31 @@ sub get_dbh {
 	# Check for our table:
 
 	if ($self->{recreate_db}) {
+		INFO 'Create tables';
 		foreach my $statement (
 			"DROP TABLE IF EXISTS $CONFIG->{index_table_name}",
 			"CREATE TABLE IF NOT EXISTS $CONFIG->{index_table_name} (
 				id INTEGER AUTO_INCREMENT PRIMARY KEY,
 				url VARCHAR(255),
-				published TINYINT(1) DEFAULT 0
+				published TINYINT(1) DEFAULT 0,
+				INDEX indexUrl (url),
+				INDEX indexPublished (published)
 			)",
 			"DROP TABLE IF EXISTS $CONFIG->{geosku_table_name}",
 			"CREATE TABLE IF NOT EXISTS $CONFIG->{geosku_table_name} (
 				geo_id2			BLOB,
 				sku				VARCHAR(10),
-				merged_table_id INTEGER
+				merged_table_id INTEGER,
+				INDEX indexSku (sku)
 				# FOREIGN KEY(merged_table_id) REFERENCES $CONFIG->{index_table_name}(merged_table_id)
 			)"
 		){
 			$self->{dbh}->do($statement);
 			$self->{dbh}->commit();
 		}
+		INFO 'Created tables.';
 	}
+	TRACE 'Leave get_dbh';
 }
 
 sub insert_geosku {
@@ -555,7 +554,7 @@ sub create_fusion_tables {
 		);
 	}
 
-	INFO 'Leave create_fusion_tables after making ', $count;
+	INFO 'Leave create_fusion_tables after making ', scalar @$tables;
 	return $tables;
 }
 
@@ -842,10 +841,12 @@ sub _populate_table_on_google {
 	foreach my $sku (@{ $self->{skus} }) {
 		INFO 'SKU: ', $sku;
 		my @geo_id2s = $self->get_geoid2s_for_sku($sku);
+		INFO 'Got to do ',($#geo_id2s), ' FIPs...';
 		foreach my $geo_id2 (@geo_id2s) {
 			if ($statements >= 500 ) {
 				TRACE 'Call interim insert';
-				push @res, $self->_execute_gsql($gsql);
+				INFO 'Calling Google to insert 500 records';
+				$self->_execute_gsql($gsql);
 				$statements = 0;
 			}
 			$gsql .= sprintf "INSERT INTO %s (GEO_ID2, SKU) VALUES ('%s', '%s');\n",
@@ -854,14 +855,14 @@ sub _populate_table_on_google {
 	}
 	TRACE 'Call final insert';
 	$self->_execute_gsql($gsql);
-	DEBUG "Inserted all rows,\nleaving _populate_table_on_google for $self->{name}";
+	INFO "Inserted all rows gSQL to Google for this table,\nleaving _populate_table_on_google for $self->{name}";
 	return 1;
 }
 
 
 sub _execute_gsql {
 	my ($self, @gsql) = @_;
-	TRACE "Posting form gSQL to ", $CONFIG->{endpoints}->{gsql};
+	INFO "Posting form gSQL to ", $CONFIG->{endpoints}->{gsql};
 	my $res = $self->_post_blob( $CONFIG->{endpoints}->{gsql}, \@gsql);
 	INFO 'Executed gsql';
 	return $res;
@@ -947,7 +948,7 @@ sub new {
 
 sub log {
 	my ($self, %params) = @_;
-	$params{message} =~ s/\n/<br>/gs;
+	$params{message} =~ s/[\n\r\f]/<br>/gs;
 	$params{message} =~ s/"/&quot;/gs;
 	printf "<p class='loglevel_%s'>%s</p>\n", $params{level}, $params{message};
 }
