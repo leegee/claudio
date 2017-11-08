@@ -1,6 +1,7 @@
 htdocs/cgi-bin/temp/**/*
 htdocs/cgi-bin/cgi.log
 htdocs/cgi-bin/sqlite.db
+htdocs/cgi-bin/latest_skus.csv
 htdocs/_
 node_modules/
 logs/
@@ -13,5 +14,4 @@ izelplants-fusion-tables
 reports/
 temp/
 *.old
-latest_skus.csv
 data/
