@@ -358,7 +358,7 @@ header h2 {
     font-size: 10pt;
 }
 
-#log-window {
+.log-window {
     overflow: scroll;
     height: 16em;
     font-family: monospace;

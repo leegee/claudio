@@ -239,7 +239,6 @@ sub upload_db {
 
 	eval {
 		$self->wipe_google_tables();
-		$self->{dbh}->commit();
 	};
 
 	INFO 'Have reset the DB. Now ingesting...';
@@ -587,6 +586,7 @@ sub wipe_google_tables {
 	}
 	$self->{dbh}->do("DELETE FROM $CONFIG->{index_table_name}");
 	$self->{dbh}->do("UPDATE $CONFIG->{geosku_table_name} SET merged_table_id = NULL");
+	$self->{dbh}->commit();
 }
 
 sub get_skus_not_uploaded {

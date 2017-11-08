@@ -75,6 +75,15 @@ elsif ($cgi->param('action') eq 'augment-db'){
     INFO "Finished - you can now leave this screen";
 }
 
+elsif ($cgi->param('action') eq 'wipe-google-data') {
+    real_time_html('DEBUG');
+    INFO "Will wipe-google-data";
+    Izel->new(
+        auth_string         => $ENV{QUERY_STRING},
+    )->wipe_google_tables();
+    INFO "Finished - you can now leave this screen";
+}
+
 elsif ($cgi->param('action') eq 'publish-some-skus') {
     real_time_html('DEBUG');
     INFO "Will publish some skus...";
