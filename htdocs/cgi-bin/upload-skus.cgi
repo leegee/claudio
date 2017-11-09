@@ -95,6 +95,7 @@ sub main {
         INFO "Finished - you can now leave this screen";
     }
 
+<<<<<<< HEAD
     elsif ($cgi->param('action') eq 'map-some-skus') {
         real_time_html('DEBUG');
         INFO "Will publish some skus...";
@@ -105,6 +106,18 @@ sub main {
         );
         INFO "Finished - you can now leave this screen";
     }
+=======
+elsif ($cgi->param('action') eq 'map-some-skus') {
+    real_time_html('DEBUG');
+    INFO "Will publish some skus...";
+    Izel->new(
+        auth_string         => $ENV{QUERY_STRING},
+    )->map_some_skus(
+        skus_text           => $cgi->param('skus-text') .'',
+    );
+    INFO "Finished - you can now leave this screen";
+}
+>>>>>>> e1f1b53323ac85cace34333a10d325733cc5eadb
 
     elsif ($cgi->param('action') eq 'resume-previous') {
         real_time_html('DEBUG');
