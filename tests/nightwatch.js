@@ -36,12 +36,33 @@ describe('Map Updater', function () {
         });
     });
 
+    describe('Sign in', () => {
+        // beforeEach(function (client, done) {
+        //     browser.waitForAngularEnabled(false);
+        //     done();
+        // });
+
+        it('should have a title', (browser) => {
+            browser.url('http://localhost/index.html');
+            expect(browser.getTitle()).equal('Map Uploader');
+        });
+
+        it('has a sign in button', (browser) => {
+            browser.driver.findElement(by.css('#auth-button')).then( el => {
+                el.click();
+            }).then( () => {
+                loginWithGoogle();
+                return browser.driver.wait( function(){ 1===3}, 1000 )
+            })
+        })
+    });
+
+
     describe('Main', function () {
         it('runs', function (browser) {
             browser
                 .url('http://localhost')
                 .waitForElementVisible('body', 4000)
-                .pause(1000000)
                 .waitForElementVisible('input#skus', 30000)
                 .setValue('input#skus', TestConfig.input.skus.small)
                 // .click('button[name=btnG]')
@@ -53,37 +74,13 @@ describe('Map Updater', function () {
 });
 
 /*
-
-
-describe('Map Uploader', () => {
-    beforeEach( () => {
-        browser.waitForAngularEnabled(false);
-    });
-
-    it('should have a title', () => {
-        browser.get('http://localhost/index.html');
-        expect(browser.getTitle()).toEqual('Map Uploader');
-    });
-
-    it('has a sign in button', () => {
-        browser.driver.findElement(by.css('#sign-in')).then( elem => {
-            elem.click();
-        }).then( () => {
-            loginWithGoogle();
-            return browser.driver.wait( function(){ 1===3}, 100000 )
-        })
-    })
-
-});
-
-
-/*
- * [selectWindow Focus the browser to the index window. 
+ * [selectWindow Focus the browser to the index window.
  * Implementation by http://stackoverflow.com/questions/21700162/protractor-e2e-testing-error-object-object-object-has-no-method-getwindowha]
- * @param  {[Object]} index [Is the index of the window. E.g., 0=browser, 1=FBpopup]
- * @return {[!webdriver.promise.Promise.<void>]}       [Promise resolved when the index window is focused.]
- 
-var selectWindow = (index) => {
+ * @param  {browser} browser
+ * @param  {[Object]} index Iindex of the window. Eg: 0=browser, 1=FBpopup
+ * @return {[!webdriver.promise.Promise.<void>]} Promise resolved when the index window is focused.
+ */
+var selectWindow = (browser, index) => {
   browser.driver.wait(function() {
       return browser.driver.getAllWindowHandles().then( (handles) => {
           if (handles.length > index) {
@@ -98,7 +95,7 @@ var selectWindow = (index) => {
 };
 
 var loginWithGoogle = function () {
-  selectWindow(1).then( () => {
+  selectWindow(browser,1).then( () => {
       return browser.driver.wait( () => {
           browser.driver.findElement(by.css('#identifierId')).then( (elem) => {
               elem.sendKeys( process.env.IZEL_GMAIL_USER );
@@ -107,12 +104,10 @@ var loginWithGoogle = function () {
                   elem.click();
               });
           }).then( () => {
-              browser.driver.sleep(10000);
-              // browser.driver.sendKeys( process.env.IZEL_GMAIL_PASS );
+              browser.driver.sleep(1000);
+              browser.driver.sendKeys( process.env.IZEL_GMAIL_PASS );
           });
       }, 100000)
   })
 }
 
- 
- */
