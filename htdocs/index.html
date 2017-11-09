@@ -78,7 +78,7 @@
                 }).then( (json) => {
                     console.table(json);
                     try {
-                        document.getElementById('number-of-published-skus').innerHTML = Number(json.numberOfPublishedSkus).toLocaleString();
+                        document.getElementById('number-of-mapped-skus').innerHTML = Number(json.numberOfMappedSkus).toLocaleString();
                         document.getElementById('number-of-total-skus').innerHTML = Number(json.numberOfTotalSkus).toLocaleString();
                     } catch (e) {}
                 });
@@ -530,7 +530,7 @@
 
     <script type='text/handlebars' id='menu'>
         <div id='status'>
-            Published <span id='number-of-published-skus'>[-]</span> of
+            Mapped <span id='number-of-mapped-skus'>[-]</span> of
             <span id='number-of-total-skus'>[-]</span> known SKUs.
         </div>
         <p>

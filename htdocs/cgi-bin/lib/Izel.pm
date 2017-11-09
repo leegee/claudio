@@ -175,7 +175,7 @@ sub status_json {
 		$res->{"numberOfTotalSkus"} = $self->{dbh}->selectall_arrayref(
 			"SELECT COUNT(DISTINCT sku) FROM $CONFIG->{geosku_table_name}"
 		)->[0]->[0];
-		$res->{"numberOfPublishedSkus"} = $self->{dbh}->selectall_arrayref(
+		$res->{"numberOfMappedSkus"} = $self->{dbh}->selectall_arrayref(
 			"SELECT COUNT(DISTINCT sku) FROM $CONFIG->{geosku_table_name} WHERE merged_table_id IS NOT NULL"
 		)->[0]->[0];
 	};
