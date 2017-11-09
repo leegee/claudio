@@ -39,7 +39,7 @@
                 GoogleAuth = gapi.auth2.getAuthInstance();
                 GoogleAuth.isSignedIn.listen(updateSigninStatus);
                 setSigninStatus();
-                document.getElementById('authButton').addEventListener('click', function () {
+                document.getElementById('auth-button').addEventListener('click', function () {
                     GoogleAuth.isSignedIn.get() ? GoogleAuth.signOut() : GoogleAuth.signIn();
                 });
             });
@@ -52,7 +52,7 @@
         function setSigninStatus(isSignedIn) {
             var user = GoogleAuth.currentUser.get();
             var isAuthorized = user.hasGrantedScopes(Config.scopes.join(' '));
-            var button = document.getElementById('authButton');
+            var button = document.getElementById('auth-button');
             button.innerHTML = isAuthorized? 'Sign out' : 'Sign In';
             button.disabled = false;
             if (isAuthorized){
@@ -671,7 +671,7 @@
             Please authorise this app and sign-in to continue.
         </p>
         <p>
-            <button disabled='true' id='authButton' name='authButton'>Contacting Google...</button>
+            <button disabled='true' id='auth-button' name='auth-button'>Contacting Google...</button>
         </p>
     </main>
 
