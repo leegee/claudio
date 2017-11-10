@@ -29,17 +29,21 @@ Page.prototype.load = function () {
   * @return {Promise.<void>} Promise resolved when logged in.
   */
 Page.prototype.loginWithGoogle = function () {
-    return this.selectWindowIndex(1).then(() => {
+    return this.selectWindowIndex(1)
+      .then(() => {
         return browser.driver.findElement(by.css('[type="email"]'))
-            .then((el) => {
-                el.sendKeys(this.username + protractor.Key.ENTER);
-            }).then(() => {
-                browser.driver.sleep(1000);
-            }).then(() => {
-                browser.actions().sendKeys(this.passphrase + protractor.Key.ENTER).perform();
-            });
-    })
-}
+    }).then((el) => {
+        el.sendKeys(this.username + protractor.Key.ENTER);
+    }).then(() => {
+        browser.driver.sleep(1000);
+    }).then(() => {
+        browser.actions().sendKeys(this.passphrase + protractor.Key.ENTER).perform();
+    }).then(() => {
+        browser.driver.sleep(10000);
+    }).then(() => {
+        this.selectWindowIndex(0);
+    });
+};
 
 /**
 * Focus the browser to the specified  window.

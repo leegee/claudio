@@ -16,9 +16,14 @@ describe('Map Uploader', () => {
         expect(browser.getTitle()).toEqual('Map Uploader');
     });
 
-    it('can sign in', () => {
+    it('signs in', () => {
         page.canSignIn();
     })
+
+    // it('has status element', () => {
+        // expect( browser.driver.findElement(by.id('status')).getText() ).not.toBe(null);
+    // });
+
 });
 
 
