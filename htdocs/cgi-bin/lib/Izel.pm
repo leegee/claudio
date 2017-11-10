@@ -81,7 +81,7 @@ sub map_some_skus {
 
 	my @msg = 'You supplied '. (1 + $#{$args->{skus_text}}). ' SKUs';
 	if (@invalid_skus) {
-		push @msg, 'The following '. (1+$#invalid_skus).' SKUs are invalid: ', join",", @invalid_skus;
+		push @msg, 'The following '. (1+$#invalid_skus).' SKUs are not in the database: ', join",", @invalid_skus;
 	}
 	if (@already_published) {
 		push @msg, 'The following '. (1+$#already_published). ' SKUs are already public: ', join",", @already_published;
