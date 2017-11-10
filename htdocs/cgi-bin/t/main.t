@@ -18,7 +18,10 @@ use JSON::Any;
 use lib 'lib';
 use Izel;
 
+my $table;
 my $izel = Izel->new(
+    recreate_db => 1,
+    dbname => 'izeltest',
     ua => Test::LWP::UserAgent->new(
         network_fallback => 0
     ),
@@ -71,76 +74,43 @@ subtest 'DB scheme init' => sub {
 
     lives_ok { $izel->get_dbh } 'get';
     ok $izel->{dbh}, 'exists';
-    ok -e $Izel::CONFIG->{db_path}, 'DB file created';
 };
 
 is $izel->ingest_sku_from_csv( path => 'data/small.csv'), 18, 'import';
 
 is_deeply $izel->get_initials(), ['A', 'S'], 'Initials';
 
-subtest 'get_dir_from_path' => sub {
-    is $izel->get_dir_from_path('/foo/bar/baz.ext'), '/foo/bar/baz', 'with filename';
-    is $izel->get_dir_from_path('/foo/bar/baz'), '/foo/bar/baz', 'with path';
-};
-
 sub test_table_obj {
     foreach my $table (@_) {
         isa_ok $table->{dbh}, 'DBI::db', 'dbh';
-        ok exists $table->{output_dir}, 'output_dir field created';
-        ok -d $table->{output_dir}, 'output_dir exists';
-        for (qw( output_dir auth_string jsoner ua auth_string )) {
+        for (qw( auth_string jsoner ua auth_string )) {
             ok exists $table->{$_}, "$_ field";
         }
     }
     return @_;
 }
 
-subtest 'create_fusion_tables' => sub {
-    subtest 'massive limit, tiny data: one table' => sub {
-        @_ = @{ $izel->create_fusion_tables };
-        @_ = test_table_obj(@_);
-        is_deeply $_[0]->{skus}, ['ARTHR', 'SCSC'], 'skus';
-        is $_[0]->{count}, 18, 'count';
-        is $_[0]->{name}, undef, 'name';
-        is $_[0]->{index_number}, 0, 'index_number';
-    };
+subtest 'massive limit, tiny data: one table' => sub {
+    @_ = @{ $izel->create_fusion_tables };
+    $table = $_[0];
+    test_table_obj(@_);
+    is_deeply $table->{skus}, ['ARTHR', 'SCSC'], 'skus';
+    is $table->{count}, 18, 'count';
+    is $table->{name}, undef, 'name';
+    is $table->{index_number}, 0, 'index_number';
 
-    subtest 'force two tables' => sub {
-        @_ = @{ $izel->create_fusion_tables(14) };
-        @_ = test_table_obj(@_);
-        is_deeply $_[0]->{skus}, ['ARTHR'], 'skus';
-        is $_[0]->{count}, 14, 'count';
-        is $_[0]->{name}, undef, 'name';
-        is $_[0]->{index_number}, 0, 'index_number';
-
-        is_deeply $_[1]->{skus}, ['SCSC'], 'skus';
-        is $_[1]->{count}, 4, 'count';
-        is $_[1]->{name}, undef, 'name';
-        is $_[1]->{index_number}, 1, 'index_number';
-    };
+    is $izel->is_sku_valid( $table->{skus}->[0] ), 1, 'is_sku_valid' or die;
+    is $izel->is_sku_published( $table->{skus}->[0] ), 0, 'is_sku_published' or die;
 };
 
-# subtest 'get_geoid2s_for_sku' => sub {
-#     @_ = $izel->get_geoid2s_for_sku('ARTHR'),
-#     is $#_, 14-1, 'Gets ARTHR';
-
-# };
-
-# subtest 'foo' => sub {
-#     my $cb = sub { $izel->get_geoid2s_for_sku(@_) };
-#     lives_ok { $cb->('ARTHR') } 'get_geoid2s_for_sku curried callback';
-# };
+subtest 'get_geoid2s_for_sku' => sub {
+    @_ = $table->get_geoid2s_for_sku('ARTHR'),
+    is $#_, 14-1, 'Gets ARTHR';
+};
 
 subtest 'create_fusion_tables' => sub {
     my $tables = $izel->create_fusion_tables;
     isa_ok $tables, 'ARRAY', 'rv';
-
-    subtest 'Table::create' => sub {
-        foreach my $table (@$tables) {
-            isa_ok $table, 'Izel::Table';
-            $table-create_from_csv();
-        }
-    };
 
     subtest 'json index' => sub {
     	my @merged_table_google_ids;

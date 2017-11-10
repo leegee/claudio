@@ -29,8 +29,10 @@ require  Text::CSV_XS;
 my $DEFAULT_US_COUNTIES_TABLE_ID = '1CP_uYV52MKV42Qt7O3TrpzS1sr7JBWPMIWxw4sQV';
 my $TOTAL_COUNTIES_IN_USA = 3_007;
 my $FUSION_TABLE_LIMIT = 100_000;
+my $COMMIT_FREQ = 10_000;
 
 our $CONFIG = {
+	dbname				=> 'geosku',
 	geosku_table_name	=> 'geosku',
 	index_table_name	=> 'table_index',
 	db_path				=> 'sqlite.db',
@@ -189,6 +191,7 @@ sub new {
 	my $inv  = shift;
 	my $args = ref($_[0])? shift : {@_};
 	$args->{us_counties_table_id} ||= $DEFAULT_US_COUNTIES_TABLE_ID;
+	$args->{dbname} ||= $CONFIG->{dbname};
 	my $self = {
 		%$args,
 		jsoner	=> JSON::Any->new,
@@ -354,7 +357,6 @@ sub ingest_sku_from_csv {
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
 	$args->{separator} ||= ',';
-	$args->{commit_every} ||= 10_000;
 
 	my $count = 0;
 
@@ -362,7 +364,7 @@ sub ingest_sku_from_csv {
 		or LOGDIE "$! - $args->{path}";
 
 	INFO 'Reading uploaded CSV, ', $args->{path};
-	INFO "Will log every $args->{commit_every} rows....";
+	INFO "Will log every $COMMIT_FREQ rows....";
 
 	my $csv_input = Text::CSV_XS->new({
 		sep_char 	=> $args->{separator},
@@ -393,7 +395,7 @@ sub ingest_sku_from_csv {
 		$self->insert_geosku( $geo_id2, $sku );
 		$count ++;
 
-		if ($count % $args->{commit_every} == 0) {
+		if ($count % $COMMIT_FREQ == 0) {
 			$self->{dbh}->commit();
 			INFO "Processed $count rows from the uploaded CSV file.";
 		}
@@ -416,7 +418,6 @@ sub _connect {
 	TRACE 'Enter _connect';
 
 	# my $dsn = "dbi:SQLite:dbname=$CONFIG->{db_path}"; my $user = ''; my $pass = '';
-	my $dbname = 'geosku';
 	my $dsn = "dbi:mysql"; # "dbi:mysql:dbname=$dbname";
 	my $user = 'root';
 	my $pass = 'admin';
@@ -426,11 +427,12 @@ sub _connect {
 
 	if ($self->{recreate_db}) {
 		INFO 'Drop and create DB';
-		$self->{dbh}->do("DROP DATABASE IF EXISTS $dbname") or LOGDIE "Cannot create database geosku"; # XXX
-		$self->{dbh}->do("CREATE DATABASE IF NOT EXISTS $dbname") or LOGDIE "Cannot create database geosku";
+		$self->{dbh}->do("DROP DATABASE IF EXISTS $self->{dbname}") or LOGDIE "Cannot create database geosku"; # XXX
+		$self->{dbh}->do("CREATE DATABASE IF NOT EXISTS $self->{dbname}") or LOGDIE "Cannot create database geosku";
 	}
 
-	$self->{dbh} = DBI->connect($dsn . ':'. $dbname, $user, $pass, {
+
+	$self->{dbh} = DBI->connect($dsn . ':'. $self->{dbname}, $user, $pass, {
 		RaiseError => 1,
 		AutoCommit => 0,
 		mysql_server_prepare => 1,
@@ -484,7 +486,9 @@ sub insert_geosku {
 
 sub get_initials {
 	return [
-		map {$_->[0]} shift->{dbh}->selectall_array("SELECT DISTINCT SUBSTR(sku,1,1) FROM  $CONFIG->{geosku_table_name} ORDER BY sku ASC")
+		map {$_->[0]} shift->{dbh}->selectall_array("
+			SELECT DISTINCT SUBSTR(sku,1,1) AS sku FROM  $CONFIG->{geosku_table_name} ORDER BY sku ASC
+		")
 	];
 }
 
@@ -536,6 +540,7 @@ sub create_fusion_tables {
 		Izel::Table->new( $table_args )
 	];
 	my $table_index = 0;
+	my $count = 0;
 
 	foreach my $record (@interleaved) {
 		# Max 100,000 rows per table for queries
@@ -551,7 +556,14 @@ sub create_fusion_tables {
 			count => $record->[0],
 			sku => $record->[1],
 		);
+		$count ++;
+		if ($count % $COMMIT_FREQ == 0) {
+			$self->{dbh}->commit();
+			INFO "Processed $count rows from the uploaded CSV file.";
+		}
 	}
+
+	$self->{dbh}->commit();
 
 	INFO 'Leave create_fusion_tables after making ', scalar @$tables;
 	return $tables;
@@ -675,14 +687,19 @@ sub _update_skus_merged_table_id {
 		WHERE sku = ?
 	");
 
+	my $count = 0;
+
 	foreach my $sku (@{ $self->{skus}}) {
 		TRACE 'update_skus_merged_table_id ', $sku;
 		$self->{sth}->{update_skus_merged_table_id}->execute(
 			$self->{merged_table_id},
 			$sku
 		);
+		$count ++;
+		if ($count > 100) {
+			$self->{dbh}->commit();
+		}
 	}
-
 	$self->{dbh}->commit();
 	TRACE 'Leave _update_skus_merged_table_id';
 }
@@ -841,7 +858,7 @@ sub _populate_table_on_google {
 				$self->{table_id}, $geo_id2, $sku;
 		}
 	}
-	TRACE 'Call final insert';
+	INFO 'Call final insert';
 	$self->_execute_gsql($gsql);
 	INFO "Inserted all rows gSQL to Google for this table,\nleaving _populate_table_on_google for $self->{name}";
 	return 1;
