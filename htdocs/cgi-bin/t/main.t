@@ -54,7 +54,6 @@ subtest 'create_fusion_tables' => sub {
 
     test_data_in_db($izel);
     $izel->{dbh}->disconnect;
-    INFO '-' x 100;
 };
 
 subtest 'map_some_skus' => sub {
@@ -74,10 +73,10 @@ subtest 'map_some_skus' => sub {
     $izel->{dbh}->disconnect;
 };
 
-
 subtest 'map_some_skus' => sub {
     $izel = newTestable();
     my $tables = $izel->map_some_skus( skus_text => 'ARTHR, SCSC') or die;
+    INFO '-' x 100;
     $table = $_[0];
     test_table_obj(@_);
     is_deeply ($table->{skus}, ['ARTHR', 'SCSC'], 'skus') or die;
@@ -87,6 +86,8 @@ subtest 'map_some_skus' => sub {
 
     is $izel->is_sku_valid( $table->{skus}->[0] ), 1, 'is_sku_valid' or die;
     is $izel->is_sku_published( $table->{skus}->[0] ), 0, 'is_sku_published' or die;
+
+    INFO '-' x 100;
 };
 
 subtest 'get_geoid2s_for_sku' => sub {
@@ -117,11 +118,10 @@ subtest 'create_fusion_tables' => sub {
         }, 'json index' or LOGDIE Dumper $json;
 
     };
-
 };
 
-
 done_testing();
+exit;
 
 
 sub newTestable {

@@ -91,24 +91,27 @@ sub map_some_skus {
 
 	if (not scalar @skus_todo) {
 		unshift @msg, 'There are no SKUs from your supplied list that can be published.\n\n';
-		LOGDIE join("\n\n", @msg, "\n");
+		WARN join("\n\n", @msg, "\n");
 	}
 
-	INFO join '\n\n', @msg;
+	else {
+		INFO join '\n\n', @msg;
 
-	my @merged_table_google_ids;
-	my $tables = $self->create_fusion_tables( \@skus_todo );
+		my @merged_table_google_ids;
+		my $tables = $self->create_fusion_tables( \@skus_todo );
 
-	foreach my $table (@$tables) {
-		$table->create();
-		INFO 'Created merged table, ', $table->{merged_table_google_id};
-		push @merged_table_google_ids, $table->{merged_table_google_id};
+		foreach my $table (@$tables) {
+			$table->create();
+			INFO 'Created merged table, ', $table->{merged_table_google_id};
+			push @merged_table_google_ids, $table->{merged_table_google_id};
+		}
+
+		$self->{dbh}->commit();
+
+		INFO join '\n\n', @msg;
 	}
 
-	$self->{dbh}->commit();
-
-	INFO join '\n\n', @msg;
-
+	TRACE 'Leave map_some_skus';
 	return $tables;
 }
 
