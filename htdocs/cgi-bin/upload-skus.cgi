@@ -52,7 +52,7 @@ sub main {
         my $izel = Izel->new(
             auth_string         => $ENV{QUERY_STRING},
         );
-        $izel->status_json();
+        print $izel->status_json();
         $izel->{dbh}->disconnect;
     }
 
