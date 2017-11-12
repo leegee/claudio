@@ -80,15 +80,16 @@ subtest 'map_some_skus' => sub {
 
     my $tables = $izel->map_some_skus( skus_text => 'ARTHR, SCSC') or die;
     INFO '-' x 100;
-    $table = $_[0];
-    test_table_obj(@_);
+    $table = $tables->[0];
+    test_table_obj($table);
+    warn Dumper $tables;
     is_deeply ($table->{skus}, ['ARTHR', 'SCSC'], 'skus') or die;
     is $table->{count}, 18, 'count';
-    is $table->{name}, undef, 'name';
+    is $table->{name}, "Merged Table #0 (ARTHR - SCSC)", 'name';
     is $table->{index_number}, 0, 'index_number';
 
     is $izel->is_sku_valid( $table->{skus}->[0] ), 1, 'is_sku_valid' or die;
-    is $izel->is_sku_published( $table->{skus}->[0] ), 0, 'is_sku_published' or die;
+    is $izel->is_sku_published( $table->{skus}->[0] ), 1, 'is_sku_published' or die;
 
     INFO '-' x 100;
 };
