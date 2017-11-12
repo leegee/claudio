@@ -43,10 +43,15 @@ our $CONFIG = {
 };
 
 sub map_some_skus {
+	INFO 'Enter process_some_skus:';
+
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
-	INFO 'Enter process_some_skus:';
+	my (@already_published, @skus_todo, @invalid_skus);
+	my $count = 0;
+	my $tables = [];
 	$args->{skus_text} ||= [];
+
     if ($args->{skus_text} and not ref $args->{skus_text}){
         $args->{skus_text} = [ split(/[,\s]+/, $args->{skus_text}) ]
     }
@@ -59,11 +64,7 @@ sub map_some_skus {
 	INFO 'Got ',
 		(1 + $#{$args->{skus_text}}),
 		' SKUs: ', join',',@{$args->{skus_text}};
-
 	INFO 'Checking validity and upload status';
-
-	my (@already_published, @skus_todo, @invalid_skus);
-	my $count = 0;
 
 	foreach my $sku (@{ $args->{skus_text} }){
 		$count ++;
@@ -98,7 +99,7 @@ sub map_some_skus {
 		INFO join '\n\n', @msg;
 
 		my @merged_table_google_ids;
-		my $tables = $self->create_fusion_tables( \@skus_todo );
+		$tables = $self->create_fusion_tables( \@skus_todo );
 
 		foreach my $table (@$tables) {
 			$table->create();

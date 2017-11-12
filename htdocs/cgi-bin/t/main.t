@@ -36,9 +36,10 @@ subtest 'DB scheme init' => sub {
     ok $izel->{dbh}, 'exists';
 };
 
-is $izel->ingest_sku_from_csv( path => 'data/small.csv'), 18, 'import';
-
-is_deeply $izel->get_initials(), ['A', 'S'], 'Initials';
+subtest 'setup' => sub {
+    is $izel->ingest_sku_from_csv( path => 'data/small.csv'), 18, 'import';
+    is_deeply $izel->get_initials(), ['A', 'S'], 'Initials';
+};
 
 subtest 'create_fusion_tables' => sub {
     @_ = @{ $izel->create_fusion_tables };
@@ -75,6 +76,8 @@ subtest 'map_some_skus' => sub {
 
 subtest 'map_some_skus' => sub {
     $izel = newTestable();
+    is $izel->ingest_sku_from_csv( path => 'data/small.csv'), 18, 'import';
+
     my $tables = $izel->map_some_skus( skus_text => 'ARTHR, SCSC') or die;
     INFO '-' x 100;
     $table = $_[0];
