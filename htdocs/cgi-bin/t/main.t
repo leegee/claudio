@@ -99,31 +99,6 @@ subtest 'get_geoid2s_for_sku' => sub {
     is $#_, 14-1, 'Gets ARTHR';
 };
 
-subtest 'create_fusion_tables' => sub {
-    my $tables = $izel->create_fusion_tables;
-    isa_ok $tables, 'ARRAY', 'rv';
-
-    subtest 'json index' => sub {
-    	my @merged_table_google_ids;
-        foreach my $table (@$tables) {
-            push @merged_table_google_ids, $table->{merged_table_google_id};
-        }
-
-        my $json = JSON::Any->jsonToObj( $izel->_make_index_file_json(@merged_table_google_ids) );
-        is_deeply $json, {
-            tableInternalId2googleTableId => {
-                '1' => $MOCK_TABLE_ID,
-                '2' => $MOCK_TABLE_ID
-            },
-            sku2tableInternalId => {
-                'SCSC' => 2,
-                'ARTHR' => 2
-            }
-        }, 'json index' or LOGDIE Dumper $json;
-
-    };
-};
-
 done_testing();
 exit;
 
