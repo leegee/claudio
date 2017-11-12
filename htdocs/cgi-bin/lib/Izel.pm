@@ -430,6 +430,7 @@ sub _connect {
 
 	if ($self->{recreate_db}) {
 		INFO 'Drop and create DB '.$self->{dbname};
+		INFO '!' x 100;
 		$self->{dbh}->do("DROP DATABASE IF EXISTS $self->{dbname}") or LOGDIE "Cannot create database geosku"; # XXX
 		$self->{dbh}->do("CREATE DATABASE IF NOT EXISTS $self->{dbname}") or LOGDIE "Cannot create database geosku";
 	}
@@ -588,6 +589,7 @@ sub wipe_google_tables {
 			url => $record->[0],
 			dbh => $self->{dbh},
 			auth_string => $self->{auth_string},
+			ua => $self->{ua},
 		)->delete_by_url();
 	}
 	$self->{dbh}->do("DELETE FROM $CONFIG->{index_table_name}");
@@ -645,6 +647,8 @@ sub new {
 		index_number => exists($args->{index_number}) ? $args->{index_number} : ($TABLES_CREATED),
 	};
 
+	LOGCONFESS 'No UA?' if not $self->{ua};
+
 	$self->{ua}->timeout(30);
 	$self->{ua}->env_proxy;
 
@@ -699,10 +703,11 @@ sub _update_skus_merged_table_id {
 
 	foreach my $sku (@{ $self->{skus}}) {
 		TRACE 'update_skus_merged_table_id ', $sku;
-		$self->{sth}->{update_skus_merged_table_id}->execute(
+		my $rv = $self->{sth}->{update_skus_merged_table_id}->execute(
 			$self->{merged_table_id},
 			$sku
 		);
+		TRACE 'updated: ', $rv;
 		$count ++;
 		if ($count > 1000) {
 			$self->{dbh}->commit();

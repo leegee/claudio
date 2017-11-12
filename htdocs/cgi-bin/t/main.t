@@ -40,16 +40,6 @@ is $izel->ingest_sku_from_csv( path => 'data/small.csv'), 18, 'import';
 
 is_deeply $izel->get_initials(), ['A', 'S'], 'Initials';
 
-sub test_table_obj {
-    foreach my $table (@_) {
-        isa_ok $table->{dbh}, 'DBI::db', 'dbh';
-        for (qw( auth_string jsoner ua auth_string )) {
-            ok exists $table->{$_}, "$_ field";
-        }
-    }
-    return @_;
-}
-
 subtest 'create_fusion_tables' => sub {
     @_ = @{ $izel->create_fusion_tables };
     $table = $_[0];
@@ -62,9 +52,28 @@ subtest 'create_fusion_tables' => sub {
     is $izel->is_sku_valid( $table->{skus}->[0] ), 1, 'is_sku_valid' or die;
     is $izel->is_sku_published( $table->{skus}->[0] ), 1, 'is_sku_published' or die Dumper $table->{skus}->[0];
 
+    test_data_in_db($izel);
     $izel->{dbh}->disconnect;
     INFO '-' x 100;
 };
+
+subtest 'map_some_skus' => sub {
+    $izel = newTestable(0);
+    test_data_in_db($izel) or die;
+    $izel->wipe_google_tables;
+    is scalar $izel->{dbh}->selectall_array("
+        SELECT DISTINCT sku FROM $Izel::CONFIG->{geosku_table_name}
+    "), 2, 'Kept SKUs in DB after wipe' or die;
+    is scalar $izel->{dbh}->selectall_array("
+        SELECT DISTINCT sku FROM $Izel::CONFIG->{geosku_table_name}
+        WHERE merged_table_id IS NOT NULL
+    "), 0, 'No published geoskus' or die;
+    is scalar $izel->{dbh}->selectall_array("
+        SELECT * FROM $Izel::CONFIG->{index_table_name}
+    "), 0, 'Removed all index table entries';
+    $izel->{dbh}->disconnect;
+};
+
 
 subtest 'map_some_skus' => sub {
     $izel = newTestable();
@@ -116,8 +125,11 @@ done_testing();
 
 
 sub newTestable {
+    my $wipe = shift;
+    $wipe = 1 if not defined $wipe;
+    INFO 'Create new Izel, wipe? ', $wipe;
     my $izel = Izel->new(
-        recreate_db => 1,
+        recreate_db => $wipe,
         dbname => 'izeltest',
         ua => Test::LWP::UserAgent->new(
             network_fallback => 0
@@ -166,3 +178,28 @@ sub newTestable {
 
     return $izel;
 }
+
+sub test_data_in_db {
+    my $izel = shift;
+    my $set = $izel->{dbh}->selectall_arrayref("
+        SELECT DISTINCT sku FROM $Izel::CONFIG->{geosku_table_name}
+    ");
+    isnt scalar @$set, 0, 'Found commited geoskus' or LOGCONFESS;
+    is scalar @$set, 2, '18 FT refs in index geosku name' or LOGCONFESS 'Expected commited geoskus';
+
+    $set = $izel->{dbh}->selectall_arrayref("
+        SELECT * FROM $Izel::CONFIG->{index_table_name}
+    ");
+    return is scalar @$set, 1, 'One FT ref  index geosku name' or die 'Expected commited geoskus';
+}
+
+sub test_table_obj {
+    foreach my $table (@_) {
+        isa_ok $table->{dbh}, 'DBI::db', 'dbh';
+        for (qw( auth_string jsoner ua auth_string )) {
+            ok exists $table->{$_}, "$_ field";
+        }
+    }
+    return @_;
+}
+
