@@ -106,8 +106,10 @@ sub map_some_skus {
 	}
 
 	$self->{dbh}->commit();
-	WARN join '\n\n', @msg;
-	return;
+
+	INFO join '\n\n', @msg;
+
+	return $tables;
 }
 
 sub is_sku_valid {
@@ -125,7 +127,7 @@ sub is_sku_valid {
 sub is_sku_published {
 	my ($self, $sku) = @_;
 	$self->{sth}->{is_sku_published} ||= $self->{dbh}->prepare("
-		SELECT sku, merged_table_id FROM $CONFIG->{geosku_table_name}
+		SELECT merged_table_id FROM $CONFIG->{geosku_table_name}
 		WHERE SKU = ? AND merged_table_id IS NOT NULL
 		LIMIT 1
 	");
@@ -184,6 +186,7 @@ sub status_json {
 	if ($@) {
 		$res = { error => $@ };
 	}
+	$self->{dbh}->disconnect;
 	return $self->{jsoner}->encode( $res );
 }
 
@@ -426,7 +429,7 @@ sub _connect {
 		or LOGDIE "Cannot connect to local mysql with $user:$pass";
 
 	if ($self->{recreate_db}) {
-		INFO 'Drop and create DB';
+		INFO 'Drop and create DB '.$self->{dbname};
 		$self->{dbh}->do("DROP DATABASE IF EXISTS $self->{dbname}") or LOGDIE "Cannot create database geosku"; # XXX
 		$self->{dbh}->do("CREATE DATABASE IF NOT EXISTS $self->{dbname}") or LOGDIE "Cannot create database geosku";
 	}
@@ -546,7 +549,6 @@ sub create_fusion_tables {
 		# Max 100,000 rows per table for queries
 		# TODO add count of data size < 250 MB per tble, < 1 GB in total,
 		# TODO If big record doesn't fit, find a smaller one.
-		INFO 'Record: ', Dumper($record);
 		if ($tables->[$table_index]->{count} + $record->[0] > $fusion_table_limit) {
 			$tables->[$table_index]->create();
 			$table_index ++;
@@ -563,9 +565,13 @@ sub create_fusion_tables {
 		}
 	}
 
+	if (not $tables->[$table_index]->{created}) {
+		$tables->[$table_index]->create();
+	}
+
 	$self->{dbh}->commit();
 
-	INFO 'Leave create_fusion_tables after making ', scalar @$tables;
+	INFO 'Leave create_fusion_tables after making ', scalar(@$tables), ' tables with ', $count, ' entries';
 	return $tables;
 }
 
@@ -611,7 +617,7 @@ sub get_skus_not_uploaded {
 
 package Izel::Table;
 use base 'IzelBase';
-use LWP::UserAgent();
+# use LWP::UserAgent();
 use JSON::Any;
 use Log::Log4perl ':easy';
 use Data::Dumper;
@@ -627,13 +633,14 @@ sub new {
 	my $inv  = shift;
 	my $args = ref($_[0])? shift : {@_};
 	$TABLES_CREATED ++;
-	$args->{ua} ||= LWP::UserAgent->new;
+	# $args->{ua} ||= LWP::UserAgent->new;
 
 	my $self = {
 		%$args,
 		jsoner	=> JSON::Any->new,
 		sth		=> {},
 		count => 0,
+		created => 0,
 		skus => [],
 		index_number => exists($args->{index_number}) ? $args->{index_number} : ($TABLES_CREATED),
 	};
@@ -667,6 +674,7 @@ sub create {
 		$self->_populate_table_on_google();
 		$self->_create_merge();
 		$self->_update_skus_merged_table_id();
+		$self->{created} = 1;
 	}
 	TRACE 'Leave';
 }
@@ -674,7 +682,7 @@ sub create {
 sub _update_skus_merged_table_id {
 	my $self = shift;
 	$self->require_defined_fields('skus', 'merged_table_google_id');
-	TRACE 'Enter _update_skus_merged_table_id for ', $#{ $self->{skus}}, ' skus';
+	TRACE 'Enter _update_skus_merged_table_id for ', 1+$#{ $self->{skus}}, ' skus';
 	$self->{sth}->{create_merged_table_id} ||= $self->{dbh}->prepare_cached("
 		INSERT INTO $CONFIG->{index_table_name} (url) VALUES (?)
 	");
@@ -696,7 +704,7 @@ sub _update_skus_merged_table_id {
 			$sku
 		);
 		$count ++;
-		if ($count > 100) {
+		if ($count > 1000) {
 			$self->{dbh}->commit();
 		}
 	}
@@ -739,7 +747,8 @@ sub _create_table_on_google {
 
 	INFO "Posting '$self->{name}' to ", $CONFIG->{endpoints}->{_create_table_on_google};
 	my $res = $self->_post_blob( $CONFIG->{endpoints}->{_create_table_on_google}, $table );
-	LOGCONFESS 'No content.tableId from Google when creating table? Res='.(Dumper $res) if not $res->{content}->{tableId};
+	LOGCONFESS 'No content.tableId from Google when creating table? Res='.(Dumper $res) ."\n\n".Dumper($self->{ua})
+		if not $res->{content}->{tableId};
 	$self->{table_id} = $res->{tableId} = $res->{content}->{tableId};
 	INFO "Created empty table ID / name: ", $self->{table_id}, ' / ', $self->{name};
 	TRACE Dumper $res;
@@ -772,11 +781,9 @@ sub _post_blob {
 		$self->{ua}->default_header( 'content-type' => 'application/octet-stream' );
 	}
 
-	# $self->{ua}->default_header( Authorization => $self->{auth_token} ) if $self->{auth_token};
-
 	$url .= ($url !~ /\?/ ? '?' : '&') . $self->{auth_string};
 
-	TRACE 'Final URL:', $url;
+	TRACE 'Final URL: POST ', $url;
 
 	my $response = $self->{ua}->post(
 		$url,
@@ -897,8 +904,7 @@ sub _create_merge {
 sub delete_by_url {
 	my $self = shift;
 	$self->require_defined_fields('url');
-	my $url = 'https://www.googleapis.com/fusiontables/v2/tables/'
-		. $self->{url} . '?' . $self->{auth_string};
+	my $url = $CONFIG->{endpoints}->{_create_table_on_google} . '/' . $self->{url} . '?' . $self->{auth_string};
 	INFO 'Delete ', $url;
 	my $response = $self->{ua}->delete($url);
 	my $res = {

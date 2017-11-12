@@ -49,66 +49,80 @@ sub main {
     if ($cgi->param('action') eq 'status'){
         logging();
         print "content-type:application/json\n\n";
-        print Izel->new(
+        my $izel = Izel->new(
             auth_string         => $ENV{QUERY_STRING},
-        )->status_json();
+        );
+        $izel->status_json();
+        $izel->{dbh}->disconnect;
     }
 
     elsif ($cgi->param('action') eq 'publish'){
         logging();
         print "content-type:application/json\n\n";
-        print Izel->new(
+        my $izel = Izel->new(
             auth_string         => $ENV{QUERY_STRING},
-        )->publish_json(
+        );
+        $izel->publish_json(
             tableId            => $cgi->param('tableId')
         );
+        $izel->{dbh}->disconnect;
     }
 
     elsif ($cgi->param('action') eq 'upload-db'){
         real_time_html('INFO');
         INFO "Will upload the file...";
-        Izel->new(
+        my $izel = Izel->new(
             auth_string         => $ENV{QUERY_STRING},
-        )->upload_db(
+        );
+        $izel->upload_db(
             skus_file_handle    => $IN,
         );
+        $izel->{dbh}->disconnect;
         INFO "Finished - you can now leave this screen";
     }
 
     elsif ($cgi->param('action') eq 'augment-db'){
         real_time_html('INFO');
         INFO "Will upload the file...";
-        Izel->new(
+        my $izel = Izel->new(
             auth_string         => $ENV{QUERY_STRING},
-        )->augment_db(
+        );
+        $izel->augment_db(
             skus_file_handle    => $IN,
         );
+        $izel->{dbh}->disconnect;
         INFO "Finished - you can now leave this screen";
     }
 
     elsif ($cgi->param('action') eq 'wipe-google-data') {
         real_time_html('DEBUG');
         INFO "Will wipe-google-data";
-        Izel->new(
+        my $izel = Izel->new(
             auth_string         => $ENV{QUERY_STRING},
-        )->wipe_google_tables();
+        );
+        $izel->wipe_google_tables();
+        $izel->{dbh}->disconnect;
         INFO "Finished - you can now leave this screen";
     }
 
     elsif ($cgi->param('action') eq 'map-some-skus') {
         real_time_html('DEBUG');
-        INFO "Will publish some skus...";
-        Izel->new(
+        INFO "Will map some skus...";
+        my $izel = Izel->new(
             auth_string         => $ENV{QUERY_STRING},
-        )->map_some_skus(
+        );
+        $izel->map_some_skus(
             skus_text           => $cgi->param('skus-text') .'',
         );
+        $izel->{dbh}->disconnect;
         INFO "Finished - you can now leave this screen";
     }
     elsif ($cgi->param('action') eq 'preview-db') {
         logging('DEBUG');
-        print "Content-type: application/json\n\n",
-            Izel->new()->preview_db();
+        print "Content-type: application/json\n\n";
+        my $izel = Izel->new();
+        print $izel->preview_db();
+        $izel->{dbh}->disconnect;
         INFO "Finished - you can now leave this screen";
     }
 
