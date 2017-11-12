@@ -68,11 +68,10 @@ subtest 'create_fusion_tables' => sub {
 
 subtest 'map_some_skus' => sub {
     $izel = newTestable();
-    is $izel->ingest_sku_from_csv( path => 'data/small.csv'), 18, 'import';
-    my $tables = $izel->map_some_skus( skus_text => 'ARTHR, SCSC');
+    my $tables = $izel->map_some_skus( skus_text => 'ARTHR, SCSC') or die;
     $table = $_[0];
     test_table_obj(@_);
-    is_deeply $table->{skus}, ['ARTHR', 'SCSC'], 'skus';
+    is_deeply ($table->{skus}, ['ARTHR', 'SCSC'], 'skus') or die;
     is $table->{count}, 18, 'count';
     is $table->{name}, undef, 'name';
     is $table->{index_number}, 0, 'index_number';
