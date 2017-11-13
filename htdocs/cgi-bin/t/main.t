@@ -26,6 +26,14 @@ my $MOCK_RES_CONTENT = {
     gsql => {rows => [[$MOCK_TABLE_ID]]}
 };
 
+sub IzelBase::signin_with_google {
+    my $self = shift;
+    $self->{ua} = Test::LWP::UserAgent->new(
+        network_fallback => 0
+    );
+}
+
+
 my $table;
 my $izel = newTestable();
 
@@ -110,13 +118,14 @@ sub newTestable {
     my $izel = Izel->new(
         recreate_db => $wipe,
         dbname => 'izeltest',
-        ua => Test::LWP::UserAgent->new(
-            network_fallback => 0
-        ),
         output_dir => File::Temp::tempdir( CLEANUP => 1 ),
         auth_string => 'mock_auth_string=keyandaccess_token=mock_access_token',
+        private_key => "-----BEGIN PRIVATE KEY-----\nmock_private_key\n-----END PRIVATE KEY-----",
+        service_ac_id => 'mock_service_ac_id',
+        id_token => 'mock',
+        client_id => 'mock',
     );
-
+    $izel->signin_with_google; # usually only tables
     isa_ok($izel, 'Izel');
     isa_ok($izel->{ua}, 'LWP::UserAgent');
     isa_ok($izel->{ua}, 'Test::LWP::UserAgent');
@@ -169,7 +178,8 @@ sub test_data_in_db {
     $set = $izel->{dbh}->selectall_arrayref("
         SELECT * FROM $Izel::CONFIG->{index_table_name}
     ");
-    return is scalar @$set, 1, 'One FT ref  index geosku name' or die 'Expected commited geoskus';
+    is scalar(@$set), 1, 'One FT ref  index geosku name' or die 'Expected commited geoskus';
+    return scalar(@$set);
 }
 
 sub test_table_obj {

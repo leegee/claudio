@@ -57,23 +57,25 @@
             button.disabled = false;
             if (isAuthorized){
                 window.wizard = new Wizard({
-                    indexBaseDir: Config.indexBaseDir,
-                    indexJsDir: Config.indexBaseDir + new Date().toISOString().replace(/\W/g, '_') + '/',
-                    access_token: user.getAuthResponse().access_token
+                    access_token: user.getAuthResponse().access_token,
+                    id_token: user.getAuthResponse().id_token
                 });
                 window.wizard.nextPage('menu');
             }
         }
 
-        var authString = function (accessToken) {
-            return 'key=' + Config.apiKey + '&access_token=' + accessToken;
+        var googleIdString = function (id_token) {
+            return 'client_id=' + Config.clientId + '&id_token=' + id_token
+            ; //  + '&key=' + Config.apiKey;
         };
 
         var pageMenuAfterRender = function () {
             this.hide('footer');
 
             this.updateStatus = this.updateStatus || function () {
-                fetch(Config.endpoints.status + ';' + authString(this.state.access_token)).then( (res) => {
+                fetch(
+                    Config.endpoints.local + '?action=status&' + googleIdString(this.state.id_token)
+                ).then( (res) => {
                     return res.json();
                 }).then( (json) => {
                     console.table(json);
@@ -88,13 +90,6 @@
             })
             this.updateStatus();
         };
-
-        var asyncListTables = async function () {
-            const response = await window.fetch(
-                'https://www.googleapis.com/fusiontables/v2/tables?' + authString(this.state.access_token),
-            );
-            return (await response.json()).items;
-        }
 
         var pageSelectSomeSkusAfterRender = function () {
             // alert(123);
@@ -118,7 +113,7 @@
             if (confirm('Really remove all Fusion Table data?')){
                 this.callAsMethod('cgi', {
                     'action': 'wipe-google-data',
-                    logWindowId: 'wipe-google-data-log'
+                    'logWindowId': 'wipe-google-data-log'
                 });
             } else {
                 Promise.resolve( this.nextPage('menu') );
@@ -182,6 +177,9 @@
                     data.append( key, args[key] );
                 }
 
+                data.append('client_id', Config.clientId);
+                data.append('id_token', this.state.id_token);
+
                 request.onreadystatechange = () => {
                     if (request.responseText.length) {
                         show(request.responseText);
@@ -189,7 +187,7 @@
                     if (request.readyState === XMLHttpRequest.DONE) {
                         if (request.status === 200) {
                             if (args.nextPage) {
-                                window.wizard.nextPage(args.nextPage, this.state.indexJsDir);
+                                window.wizard.nextPage(args.nextPage);
                             }
                             resolve();
                         } else {
@@ -198,7 +196,7 @@
                         }
                     }
                 }
-                request.open('POST', Config.endpoints.uploadDb + '?' + authString(this.state.access_token));
+                request.open('POST', Config.endpoints.local);
                 request.send(data);
             });
         }
@@ -206,19 +204,10 @@
         var publishFusionTable = async function(tableId, next) {
             // POST /drive/v2/files/<fusiontable_id or document_id>/permissions HTTP/1.1
             var response = await window.fetch(
-                Config.endpoints.local + '?action=publish;'
-                    + authString(this.state.access_token)
-                    + ';tableId=' + tableId
+                Config.endpoints.local + '?action=publish&'
+                    + googleIdString(this.state.id_token)
+                    + '&tableId=' + tableId
             );
-                // 'https://www.googleapis.com/drive/v2/files/' + tableId + '/permissions?' + authString(this.state.access_token),
-                // {
-                //     method: 'POST',
-                //     body: JSON.stringify({"role": "reader","type": "anyone"}),
-                //     headers: {
-                //         'Accept': 'application/json',
-                //         'Content-Type': 'application/json'
-                //     }
-                // }
             var json = await response.json();
             console.log(json);
             if (next) {
@@ -228,7 +217,7 @@
 
         var pagePreviewDbBeforeRender = async function () {
             var response = await window.fetch(
-                Config.endpoints.local + '?action=preview-db'
+                Config.endpoints.local + '?action=preview-db&' + googleIdString(this.state.id_token)
             );
             var json = await response.json();
             this.callAsMethod(viewIndex, json);
@@ -292,23 +281,6 @@
                 this.state[key] = json[key];
             });
         };
-
-        // var pageReviewSpecificIndexBeforeRender = async function (e) {
-        //     if (e instanceof Array) {
-        //         e = e[0]
-        //     }
-        //     if (typeof e === 'string') {
-        //         this.state.jobName = e;
-        //     } else {
-        //         // Called by click event
-        //         this.state.jobName = ('/' + this.state.indexBaseDir + '/' + e.target.innerText).replace(/\/+/g, '/');
-        //     }
-        //     var url = (this.state.jobName + '/index.js').replace(/\/+/g, '/');
-        //     var response = await window.fetch(url);
-        //     var json = await response.json();
-        //     this.callAsMethod(viewIndex, json);
-        //     console.log('Leave pageReviewSpecificIndexBeforeRender with ', this.state.skus2ids)
-        // }
 
         var _linksFromText = function (str) {
             var m,

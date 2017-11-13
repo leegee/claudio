@@ -35,20 +35,22 @@ exit;
 sub main {
     my $IN;
     my $cgi = CGI->new;
-    my @missing = grep {! $cgi->param($_) } qw/ skus-file action /;
-
     if ($cgi->param('action') =~ /^(augment|upload)-db$/){
+        my @missing = grep {! $cgi->param($_) } qw/ skus-file action /;
         $IN  = $cgi->upload('skus-file');
         push(@missing, '(skus-file is not a filehandle)') if not defined $IN;
-        if (@missing) {
-            LOGDIE 'Missing params: ', join ', ', @missing;
-        }
+        LOGDIE 'Missing params: ' . join(', ', @missing) if @missing;
     }
 
     my $param = {
         private_key => $PRIVATE_KEY,
-        service_ac_id => $SERVICE_AC_ID
+        service_ac_id => $SERVICE_AC_ID,
+        id_token => $cgi->param('id_token'),
+        client_id => $cgi->param('client_id'),
     };
+
+    my @missing = grep {! $cgi->param($_) } qw/ id_token client_id /;
+    LOGDIE 'Missing auth params: ' . join(', ', @missing) if @missing;
 
     if ($cgi->param('action') eq 'status'){
         logging();

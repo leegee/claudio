@@ -11,13 +11,41 @@ require JSON::XS;
 require JSON::WebToken;
 require LWP::UserAgent;
 
+our @VALID_CLIENT_IDS = qw[
+	837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com
+];
+
 sub require_defined_fields {
 	my ($self, @fields) = @_;
 	my @missing = grep {
 		not exists $self->{$_}
 		or not defined $self->{$_}
 	} @fields;
-	LOGCONFESS 'Missing fields: ' . join(', ', @missing) . "\nin " . Dumper($self) if @missing;
+	LOGCONFESS 'Missing fields: ' . join(', ', @missing) #  . "\nin " . Dumper($self)
+		if @missing;
+}
+
+# @see https://developers.google.com/identity/sign-in/web/backend-auth
+sub verify_with_google {
+	my $self = shift;
+	my $res = LWP::UserAgent->new()->get(
+		'https://www.googleapis.com/oauth2/v3/tokeninfo?id_token='
+		. $self->{id_token}
+	);
+	LOGDIE 'Bad request' if not $res->is_success();
+
+	my $re = '"aud"\s*:\s*"('
+		. join( '|', map { quotemeta($_) } (
+			$self->{client_id},
+			@VALID_CLIENT_IDS
+		))
+		. ')"';
+
+	if ($res->decoded_content =~ qr/$re/) {
+		return 1;
+	} else {
+		LOGDIE "You are not a valid user!\n", Dumper($res);
+	}
 }
 
 sub signin_with_google {
@@ -251,9 +279,15 @@ sub new {
 		sth		=> {},
 	};
 
-	LOGDIE 'No service_ac_id or private_key' if not $self->{service_ac_id} or not $self->{private_key};
-
 	$self = bless $self, ref($inv) ? ref($inv) : $inv;
+
+	$self->require_defined_fields(qw/
+		service_ac_id
+		private_key
+		client_id
+		id_token
+	/);
+	$self->verify_with_google() if $ENV{DOCUMENT_ROOT};
 	$self->get_dbh;
 	# $self->signin_with_google();
 	return $self;
