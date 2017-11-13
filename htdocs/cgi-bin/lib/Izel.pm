@@ -148,12 +148,6 @@ sub date_to_name {
 	return sprintf "%d%02d%02d-%02d%02d%02d/", $year+1900, $mon+1, $mday, $hour, $min, $sec;
 }
 
-sub publish_index {
-	my $inv = ref($_[0]) || $_[0] eq __PACKAGE__? shift : '';
-	my $args = ref($_[0])? shift : {@_};
-	File::Copy::move( $args->{from}, $args->{to} );
-}
-
 sub copy_cgi_file {
 	my $self = shift;
 	my $skus_file_handle = shift;
@@ -218,26 +212,14 @@ sub new {
 	return $self;
 }
 
-sub publish_json {
+sub publish_fusion_table {
     my $self = shift;
     my $args = ref($_[0])? shift : {@_};
 	DEBUG 'Enter publish';
 	my $res = Izel::Table->new(
-		map { $_ => $self->{$_} } qw/ auth_token auth_string jsoner dbh ua/
-	)->_post_blob(
-		'https://www.googleapis.com/drive/v2/files/' . $args->{tableId} . '/permissions?',
-		{
-			role => "reader",
-			type => "anyone"
-		}
+		map { $_ => $self->{$_} } qw/ auth_token auth_string jsoner dbh ua table_id/
 	);
-	$self->{dbh}->do(
-		"UPDATE $CONFIG->{index_table_name} SET published = 1 WHERE url = ?",
-		{},
-		$args->{tableId}
-	);
-	$self->{dbh}->commit();
-	return $self->{jsoner}->encode($res);
+	$table->publish_fusion_table();
 }
 
 sub upload_db {
@@ -681,6 +663,7 @@ sub create {
 		$self->_populate_table_on_google();
 		$self->_create_merge();
 		$self->_update_skus_merged_table_id();
+		$self->publish_fusion_table();
 		$self->{created} = 1;
 	}
 	TRACE 'Leave';
@@ -731,7 +714,7 @@ sub _create_table_on_google {
 	my $self = shift;
 
 	$self->set_name_from_skus('SKU/Geo');
-	$self->require_defined_fields(qw/ index_number name /);
+	$self->require_defined_fields(qw/ index_number name auth_string /);
 
 	my $table = {
 		name => $self->{name},
@@ -760,6 +743,7 @@ sub _create_table_on_google {
 	$self->{table_id} = $res->{tableId} = $res->{content}->{tableId};
 	INFO "Created empty table ID / name: ", $self->{table_id}, ' / ', $self->{name};
 	TRACE Dumper $res;
+	$self->publish_fusion_table();
 	return $res;
 }
 
@@ -769,6 +753,7 @@ sub _create_table_on_google {
 sub _post_blob {
 	my ($self, $url, $payload) = @_;
 	TRACE 'Enter _post_blob for ', $url;
+	$self->require_defined_fields('auth_string');
 	my $isFormData;
 
 	if (ref $payload) {
@@ -876,6 +861,7 @@ sub _populate_table_on_google {
 	INFO 'Call final insert';
 	$self->_execute_gsql($gsql);
 	INFO "Inserted all rows gSQL to Google for this table,\nleaving _populate_table_on_google for $self->{name}";
+	$self->publish_fusion_table();
 	return 1;
 }
 
@@ -907,6 +893,29 @@ sub _create_merge {
 	} else {
 		LOGCONFESS 'Unexpected response to gsql:', $gsql, "\nResponse:", Dumper $res;
 	}
+}
+
+sub publish_fusion_table {
+	my $self = shift;
+	INFO 'Publish Fusion Table ', $self->{table_id};
+	$self->require_defined_fields('table_id');
+	$self->_post_blob(
+		'https://www.googleapis.com/drive/v2/files/' . $self->{table_id} . '/permissions?',
+		{
+			role => "reader",
+			type => "anyone"
+		}
+	);
+	if (not $res->{error}) {
+		$self->{dbh}->do(
+			"UPDATE $CONFIG->{index_table_name} SET published = 1 WHERE url = ?",
+			{},
+			$self->{tableId}
+		);
+		$self->{dbh}->commit();
+	}
+	INFO $res;
+	return $self->{jsoner}->encode($res);
 }
 
 sub delete_by_url {

@@ -60,11 +60,10 @@ sub main {
         logging();
         print "content-type:application/json\n\n";
         my $izel = Izel->new(
-            auth_string         => $ENV{QUERY_STRING},
+            auth_string  => $ENV{QUERY_STRING},
+            table_id     => $cgi->param('tableId')
         );
-        $izel->publish_json(
-            tableId            => $cgi->param('tableId')
-        );
+        $izel->publish_fusion_table();
         $izel->{dbh}->disconnect;
     }
 

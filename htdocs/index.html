@@ -208,15 +208,6 @@
                     + authString(this.state.access_token)
                     + ';tableId=' + tableId
             );
-                // 'https://www.googleapis.com/drive/v2/files/' + tableId + '/permissions?' + authString(this.state.access_token),
-                // {
-                //     method: 'POST',
-                //     body: JSON.stringify({"role": "reader","type": "anyone"}),
-                //     headers: {
-                //         'Accept': 'application/json',
-                //         'Content-Type': 'application/json'
-                //     }
-                // }
             var json = await response.json();
             console.log(json);
             if (next) {
