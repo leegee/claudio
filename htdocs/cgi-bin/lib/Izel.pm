@@ -223,7 +223,7 @@ sub publish_json {
     my $args = ref($_[0])? shift : {@_};
 	DEBUG 'Enter publish';
 	my $res = Izel::Table->new(
-		map { $_ => $self->{$_} } qw/ auth_token auth_string jsoner dbh ua/
+		map { $_ => $self->{$_} } qw/ ua auth_token auth_string jsoner dbh /
 	)->_post_blob(
 		'https://www.googleapis.com/drive/v2/files/' . $args->{tableId} . '/permissions?',
 		{
@@ -541,7 +541,7 @@ sub create_fusion_tables {
 	}
 
 	my $table_args = {
-		map { $_ => $self->{$_} } qw/ auth_token auth_string jsoner dbh us_counties_table_id ua/
+		map { $_ => $self->{$_} } qw/ ua auth_token auth_string jsoner dbh us_counties_table_id /
 	};
 
 	my $tables = [
@@ -623,7 +623,7 @@ sub get_skus_not_uploaded {
 
 package Izel::Table;
 use base 'IzelBase';
-# use LWP::UserAgent();
+use LWP::UserAgent();
 use JSON::Any;
 use Log::Log4perl ':easy';
 use Data::Dumper;
@@ -648,6 +648,7 @@ sub new {
 		count => 0,
 		created => 0,
 		skus => [],
+		ua => LWP::UserAgent->new(),
 		index_number => exists($args->{index_number}) ? $args->{index_number} : ($TABLES_CREATED),
 	};
 

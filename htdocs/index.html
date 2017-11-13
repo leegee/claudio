@@ -115,10 +115,14 @@
         }
 
         var pageWipeGoogleDataAfterRender = async function () {
-            this.callAsMethod('cgi', {
-                'action': 'wipe-google-data',
-                logWindowId: 'wipe-google-data-log'
-            });
+            if (confirm('Really remove all Fusion Table data?')){
+                this.callAsMethod('cgi', {
+                    'action': 'wipe-google-data',
+                    logWindowId: 'wipe-google-data-log'
+                });
+            } else {
+                Promise.resolve( this.nextPage('menu') );
+            }
         };
 
         var pageMapSomeSkusBeforeRender = async function () {
