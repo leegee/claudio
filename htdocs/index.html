@@ -73,7 +73,7 @@
             this.hide('footer');
 
             this.updateStatus = this.updateStatus || function () {
-                fetch(Config.endpoints.status + ';' + authString(this.state.access_token)).then( (res) => {
+                fetch(Config.endpoints.local + '?action=status;' + authString(this.state.access_token)).then( (res) => {
                     return res.json();
                 }).then( (json) => {
                     console.table(json);
@@ -115,10 +115,14 @@
         }
 
         var pageWipeGoogleDataAfterRender = async function () {
-            this.callAsMethod('cgi', {
-                'action': 'wipe-google-data',
-                logWindowId: 'wipe-google-data-log'
-            });
+            if (confirm('Really wipe all Fusion Table data?')){
+                this.callAsMethod('cgi', {
+                    'action': 'wipe-google-data',
+                    logWindowId: 'wipe-google-data-log'
+                });
+            } else {
+                return Promise.resolve();
+            }
         };
 
         var pageMapSomeSkusBeforeRender = async function () {
@@ -172,8 +176,6 @@
                     }
                 ;
 
-                // logwindow.setAttribute('style', '   overflow:scroll; height: 20em; font-family: monospace; white-space: pre; ');
-
                 for (key in args) {
                     data.append( key, args[key] );
                 }
@@ -194,7 +196,7 @@
                         }
                     }
                 }
-                request.open('POST', Config.endpoints.uploadDb + '?' + authString(this.state.access_token));
+                request.open('POST', Config.endpoints.local + '?' + authString(this.state.access_token));
                 request.send(data);
             });
         }
@@ -637,23 +639,6 @@
     <script type='text/handlebars' id='preview-db'>
         {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
     </script>
-
-    <!--
-    <script type='text/handlebars' id='restart-previous'>
-        <h2>Creating Maps</h2>
-        <div class='log-window'><p>Resuming the previous job from scratch.</p></div>
-    </script>
-
-    <script type='text/handlebars' id='resume-previous'>
-        <h2>Creating Maps</h2>
-        <div class='log-window'><p>Resuming the previous job.</p></div>
-    </script>
-
-    <script type='text/handlebars' id='review-some-skus'>
-        {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
-    </script>
-    -->
-
 </head>
 
 <body>

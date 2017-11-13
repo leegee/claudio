@@ -623,7 +623,7 @@ sub get_skus_not_uploaded {
 
 package Izel::Table;
 use base 'IzelBase';
-# use LWP::UserAgent();
+use LWP::UserAgent();
 use JSON::Any;
 use Log::Log4perl ':easy';
 use Data::Dumper;
@@ -639,7 +639,7 @@ sub new {
 	my $inv  = shift;
 	my $args = ref($_[0])? shift : {@_};
 	$TABLES_CREATED ++;
-	# $args->{ua} ||= LWP::UserAgent->new;
+	$args->{ua} ||= LWP::UserAgent->new;
 
 	my $self = {
 		%$args,
@@ -651,8 +651,7 @@ sub new {
 		index_number => exists($args->{index_number}) ? $args->{index_number} : ($TABLES_CREATED),
 	};
 
-	LOGCONFESS 'No UA?' if not $self->{ua};
-
+	# LOGCONFESS 'No UA?' if not $self->{ua};
 	$self->{ua}->timeout(30);
 	$self->{ua}->env_proxy;
 

@@ -359,8 +359,8 @@ header h2 {
 }
 
 .log-window {
-    overflow: scroll;
-    height: 16em;
+    overflow: auto;
+    height: 90%;
     font-family: monospace;
     white-space: pre;
     background: #ddd;
