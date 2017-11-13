@@ -1,3 +1,4 @@
+use strict;
 use warnings;
 
 # See https://developers.google.com/fusiontables/docs/v2/using#ImportingRowsIntoTables
@@ -6,6 +7,9 @@ use warnings;
 package IzelBase;
 use Data::Dumper;
 use Log::Log4perl ':easy';
+require JSON::XS;
+require JSON::WebToken;
+require LWP::UserAgent;
 
 sub require_defined_fields {
 	my ($self, @fields) = @_;
@@ -15,6 +19,49 @@ sub require_defined_fields {
 	} @fields;
 	LOGCONFESS 'Missing fields: ' . join(', ', @missing) . "\nin " . Dumper($self) if @missing;
 }
+
+sub signin_with_google {
+	my $self = shift;
+    $self->{auth_duration} ||= 60 * 10;
+	$self->{auth_scopes} ||=[
+		'https://www.googleapis.com/auth/plus.login',
+		'https://www.googleapis.com/auth/fusiontables',
+		'https://www.googleapis.com/auth/drive',
+	];
+    $self->{auth_scopes} = ref($self->{auth_scopes})? join(' ', @{$self->{auth_scopes}}) : $self->{auth_scopes};
+    my $time = time;
+
+	$self->require_defined_fields('service_ac_id', 'private_key');
+
+    my $res = LWP::UserAgent->new()->post('https://accounts.google.com/o/oauth2/token', {
+        grant_type => 'urn:ietf:params:oauth:grant-type:jwt-bearer', # HTML::Entities::encode_entities('urn:ietf:params:oauth:grant-type:jwt-bearer'),
+        assertion => JSON::WebToken->encode(
+            {
+                iss => $self->{service_ac_id},
+                scope => $self->{auth_scopes},
+                aud => 'https://accounts.google.com/o/oauth2/token',
+                exp => $time + $self->{auth_duration},
+                iat => $time
+            },
+            $self->{private_key},
+            'RS256', {typ => 'JWT'}
+        )
+    });
+
+    unless ($res->is_success()) {
+        LOGDIE $res->code .' - '. $res->content;
+    }
+
+    $self->{ua} = LWP::UserAgent->new();
+    $self->{ua}->default_header(
+        Authorization => 'Bearer ' . JSON::XS::decode_json($res->content)->{access_token}
+    );
+	$self->{ua}->timeout(30);
+	$self->{ua}->env_proxy;
+	INFO 'Created UA';
+}
+
+1;
 
 package Izel;
 use base 'IzelBase';
@@ -44,7 +91,6 @@ our $CONFIG = {
 
 sub map_some_skus {
 	INFO 'Enter process_some_skus:';
-
 	my $self = shift;
 	my $args = ref($_[0])? shift : {@_};
 	my (@already_published, @skus_todo, @invalid_skus);
@@ -205,16 +251,11 @@ sub new {
 		sth		=> {},
 	};
 
-	if ($self->{auth_string} and not $self->{auth_token}) {
-		($self->{auth_token}) = $self->{auth_string} =~ /access_token=(.+)$/;
-		INFO 'SET AUTH TOKEN TO ', $self->{auth_token};
-		if (not defined $self->{auth_token}) {
-			LOGCONFESS 'No auth token found in auth_string, ' . $self->{auth_string};
-		}
-	}
+	LOGDIE 'No service_ac_id or private_key' if not $self->{service_ac_id} or not $self->{private_key};
 
 	$self = bless $self, ref($inv) ? ref($inv) : $inv;
 	$self->get_dbh;
+	# $self->signin_with_google();
 	return $self;
 }
 
@@ -223,7 +264,7 @@ sub publish_json {
     my $args = ref($_[0])? shift : {@_};
 	DEBUG 'Enter publish';
 	my $res = Izel::Table->new(
-		map { $_ => $self->{$_} } qw/ ua auth_token auth_string jsoner dbh /
+		map { $_ => $self->{$_} } qw/ ua private_key service_ac_id jsoner dbh /
 	)->_post_blob(
 		'https://www.googleapis.com/drive/v2/files/' . $args->{tableId} . '/permissions?',
 		{
@@ -254,8 +295,9 @@ sub upload_db {
 	INFO 'Have reset the DB. Now ingesting...';
 
     my $jsonRes = Izel->new(
-		recreate_db			=> 1,
-        auth_string         => $args->{auth_string},
+		recreate_db		=> 1,
+        service_ac_id	=> $args->{service_ac_id},
+		private_key		=> $args->{service_ac_id},
     )->db_from_csv(
         skus2fips_csv_path  => $uploaded_sku_csv_path,
     );
@@ -272,7 +314,8 @@ sub augment_db {
 	my $uploaded_sku_csv_path = $self->copy_cgi_file($args->{skus_file_handle});
 
     my $jsonRes = Izel->new(
-        auth_string          => $args->{auth_string},
+        service_ac_id	=> $args->{service_ac_id},
+		private_key		=> $args->{service_ac_id},
     )->db_from_csv(
         skus2fips_csv_path   => $uploaded_sku_csv_path,
     );
@@ -541,7 +584,7 @@ sub create_fusion_tables {
 	}
 
 	my $table_args = {
-		map { $_ => $self->{$_} } qw/ ua auth_token auth_string jsoner dbh us_counties_table_id /
+		map { $_ => $self->{$_} } qw/ ua private_key service_ac_id jsoner dbh us_counties_table_id /
 	};
 
 	my $tables = [
@@ -590,10 +633,11 @@ sub wipe_google_tables {
 	foreach my $record (@tables) {
 		TRACE 'Delete table, ', $record->[0];
 		Izel::Table->new(
-			url => $record->[0],
-			dbh => $self->{dbh},
-			auth_string => $self->{auth_string},
-			ua => $self->{ua},
+			url 			=> $record->[0],
+			dbh 			=> $self->{dbh},
+			service_ac_id	=> $self->{service_ac_id},
+			private_key		=> $self->{private_key},
+			ua				=> $self->{ua},
 		)->delete_by_url();
 	}
 	$self->{dbh}->do("DELETE FROM $CONFIG->{index_table_name}");
@@ -639,7 +683,6 @@ sub new {
 	my $inv  = shift;
 	my $args = ref($_[0])? shift : {@_};
 	$TABLES_CREATED ++;
-	# $args->{ua} ||= LWP::UserAgent->new;
 
 	my $self = {
 		%$args,
@@ -648,16 +691,14 @@ sub new {
 		count => 0,
 		created => 0,
 		skus => [],
-		ua => LWP::UserAgent->new(),
 		index_number => exists($args->{index_number}) ? $args->{index_number} : ($TABLES_CREATED),
 	};
 
-	LOGCONFESS 'No UA?' if not $self->{ua};
-
-	$self->{ua}->timeout(30);
-	$self->{ua}->env_proxy;
-
 	$self = bless $self, ref($inv) ? ref($inv) : $inv;
+
+	$self->require_defined_fields('service_ac_id', 'private_key');
+	$self->signin_with_google();
+	$self->require_defined_fields('ua');
 
 	return $self;
 }
@@ -791,8 +832,6 @@ sub _post_blob {
 		$self->{ua}->default_header( 'content-type' => 'application/octet-stream' );
 	}
 
-	$url .= ($url !~ /\?/ ? '?' : '&') . $self->{auth_string};
-
 	TRACE 'Final URL: POST ', $url;
 
 	my $response = $self->{ua}->post(
@@ -914,7 +953,7 @@ sub _create_merge {
 sub delete_by_url {
 	my $self = shift;
 	$self->require_defined_fields('url');
-	my $url = $CONFIG->{endpoints}->{_create_table_on_google} . '/' . $self->{url} . '?' . $self->{auth_string};
+	my $url = $CONFIG->{endpoints}->{_create_table_on_google} . '/' . $self->{url};
 	INFO 'Delete ', $url;
 	my $response = $self->{ua}->delete($url);
 	my $res = {
@@ -973,5 +1012,6 @@ sub log {
 	$params{message} =~ s/"/&quot;/gs;
 	printf "<p class='loglevel_%s'>%s</p>\n", $params{level}, $params{message};
 }
+
 
 1;

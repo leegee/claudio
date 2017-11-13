@@ -9,13 +9,12 @@ use Log::Log4perl ':easy';
 use lib 'lib';
 use Izel;
 
+my $SERVICE_AC_ID = 'izel-dev@izel-maps-dev.iam.gserviceaccount.com';
 
-# Log::Log4perl->easy_init({
-#     # file => 'cgi.log',
-#     file => {'STDOUT'},
-#     level => $TRACE,
-#     layout => '%m %l\n'
-# });
+my $PRIVATE_KEY = << '_END_OF_KEY_';
+-----BEGIN PRIVATE KEY-----
+-----END PRIVATE KEY-----
+_END_OF_KEY_
 
 $CGI::POST_MAX = 1024 * 100000000; # 208795632
 $CGI::DISABLE_UPLOADS = 0;
@@ -46,12 +45,15 @@ sub main {
         }
     }
 
+    my $param = {
+        private_key => $PRIVATE_KEY,
+        service_ac_id => $SERVICE_AC_ID
+    };
+
     if ($cgi->param('action') eq 'status'){
         logging();
         print "content-type:application/json\n\n";
-        my $izel = Izel->new(
-            auth_string         => $ENV{QUERY_STRING},
-        );
+        my $izel = Izel->new($param);
         print $izel->status_json();
         $izel->{dbh}->disconnect;
     }
@@ -59,9 +61,7 @@ sub main {
     elsif ($cgi->param('action') eq 'publish'){
         logging();
         print "content-type:application/json\n\n";
-        my $izel = Izel->new(
-            auth_string         => $ENV{QUERY_STRING},
-        );
+        my $izel = Izel->new($param);
         $izel->publish_json(
             tableId            => $cgi->param('tableId')
         );
@@ -71,9 +71,7 @@ sub main {
     elsif ($cgi->param('action') eq 'upload-db'){
         real_time_html('INFO');
         INFO "Will upload the file...";
-        my $izel = Izel->new(
-            auth_string         => $ENV{QUERY_STRING},
-        );
+        my $izel = Izel->new($param);
         $izel->upload_db(
             skus_file_handle    => $IN,
         );
@@ -84,9 +82,7 @@ sub main {
     elsif ($cgi->param('action') eq 'augment-db'){
         real_time_html('INFO');
         INFO "Will upload the file...";
-        my $izel = Izel->new(
-            auth_string         => $ENV{QUERY_STRING},
-        );
+        my $izel = Izel->new($param);
         $izel->augment_db(
             skus_file_handle    => $IN,
         );
@@ -97,9 +93,7 @@ sub main {
     elsif ($cgi->param('action') eq 'wipe-google-data') {
         real_time_html('DEBUG');
         INFO "Will wipe-google-data";
-        my $izel = Izel->new(
-            auth_string         => $ENV{QUERY_STRING},
-        );
+        my $izel = Izel->new($param);
         $izel->wipe_google_tables();
         $izel->{dbh}->disconnect;
         INFO "Finished - you can now leave this screen";
@@ -108,9 +102,7 @@ sub main {
     elsif ($cgi->param('action') eq 'map-some-skus') {
         real_time_html('DEBUG');
         INFO "Will map some skus...";
-        my $izel = Izel->new(
-            auth_string         => $ENV{QUERY_STRING},
-        );
+        my $izel = Izel->new($param);
         $izel->map_some_skus(
             skus_text           => $cgi->param('skus-text') .'',
         );
@@ -120,7 +112,7 @@ sub main {
     elsif ($cgi->param('action') eq 'preview-db') {
         logging('DEBUG');
         print "Content-type: application/json\n\n";
-        my $izel = Izel->new();
+        my $izel = Izel->new($param);
         print $izel->preview_db();
         $izel->{dbh}->disconnect;
         INFO "Finished - you can now leave this screen";
