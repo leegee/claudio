@@ -299,7 +299,6 @@ main, footer {
     padding-top: 0;
     margin-top: 0;
     padding-bottom: 4em;
-    max-width: 600pt;
 }
 
 footer {
@@ -311,12 +310,13 @@ textarea {
 
 @media only screen and (min-width: 801pt) {
     header, main, footer {
-        width: 600pt;
+        /* width: 600pt;
         left: -300pt;
-        margin-left: 50%;
+        margin-left: 50%; */
     }
     textarea {
-        width: 100%;
+        width: 90%;
+        height: 10em;
     }
 }
 

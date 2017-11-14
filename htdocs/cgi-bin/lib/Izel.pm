@@ -331,10 +331,10 @@ sub preview_db {
 	INFO 'Got ', (1+$#skus2table_ids), ' total SKUs';
 
 	my $json = $self->{jsoner}->encode({
-		sku2tableInternalId => { map { $_->[0] => $_->[2] } @skus2table_ids },
+		sku2tableInternalId => { map { $_->[0] => $_->[2] } sort {$b->[0] cmp $a->[0]} @skus2table_ids },
 		tableInternalId2googleTableId  => { map { $_->[0] => $_->[1] } @tableInternalId2googleTableId },
 		tableInternalId2published  => { map { $_->[0] => $_->[2] } @tableInternalId2googleTableId },
-		googleTableId2published  => { map { $_->[1] => $_->[2] } @tableInternalId2googleTableId },
+		# googleTableId2published  => { map { $_->[1] => $_->[2] } @tableInternalId2googleTableId },
 	});
 
 	return $json;

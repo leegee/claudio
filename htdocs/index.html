@@ -12,7 +12,6 @@
 
     <link rel="stylesheet" href="css/normalize.css">
     <link rel="stylesheet" href="css/main.css">
-    <!-- script src="https://cdnjs.cloudflare.com/ajax/libs/mustache.js/2.3.0/mustache.min.js"></script -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.0.11/handlebars.min.js"></script>
 
     <meta name="google-signin-client_id" content="837054515213-gja7o8fkcc63vge1noitlu39ijjgrmtu.apps.googleusercontent.com">
@@ -201,20 +200,6 @@
             });
         }
 
-        var publishFusionTable = async function(tableId, next) {
-            // POST /drive/v2/files/<fusiontable_id or document_id>/permissions HTTP/1.1
-            var response = await window.fetch(
-                Config.endpoints.local + '?action=publish;'
-                    + authString(this.state.access_token)
-                    + ';tableId=' + tableId
-            );
-            var json = await response.json();
-            console.log(json);
-            if (next) {
-                this.callAsMethod(next, json);
-            }
-        };
-
         var pagePreviewDbBeforeRender = async function () {
             var response = await window.fetch(
                 Config.endpoints.local + '?action=preview-db'
@@ -236,42 +221,10 @@
         var pagePreviewDbAfterRender = async function () {
             var todo = 0;
 
-            Object.keys(this.state.googleTableId2published).forEach( (id) => {
-                if (this.state.googleTableId2published[id]===1) {
-                    todo++;
-                }
-            });
-
-            Object.keys(this.state.tableInternalId2googleTableId).forEach( (iId) => {
-                this.callAsMethod('setCssClass', iId, this.state.tableInternalId2published[iId]);
-            });
-
             if (! todo) {
                 var el = document.getElementById('publish-tableInternalId2googleTableId');
                 el.outerHTML = '';
                 delete el;
-            }
-
-            if (! this.el.publishTables){
-                this.el.publishTables = document.getElementById('publish-tableInternalId2googleTableId');
-                if (this.el.publishTables) {
-                    this.el.publishTables.addEventListener('click', () => {
-                        var promises = [];
-                        this.el.publishTables.disabled = true;
-                        console.log('Publish: ', this.state.googleTableId2published);
-                        Object.keys( this.state.googleTableId2published ).forEach( async (tableId) => {
-                            if (this.state.googleTableId2published[tableId] === 0) {
-                                console.log('Publish ', tableId);
-                                promises.push(this.callAsMethod('publishFusionTable', tableId));
-                            } else {
-                                console.log('Have already published ', tableId);
-                            }
-                        });
-                        Promise.all(promises).then( () => {
-                            alert('Published ' + promises.length + ' tables');
-                        })
-                    });
-                }
             }
         }
 
@@ -281,23 +234,6 @@
                 this.state[key] = json[key];
             });
         };
-
-        // var pageReviewSpecificIndexBeforeRender = async function (e) {
-        //     if (e instanceof Array) {
-        //         e = e[0]
-        //     }
-        //     if (typeof e === 'string') {
-        //         this.state.jobName = e;
-        //     } else {
-        //         // Called by click event
-        //         this.state.jobName = ('/' + this.state.indexBaseDir + '/' + e.target.innerText).replace(/\/+/g, '/');
-        //     }
-        //     var url = (this.state.jobName + '/index.js').replace(/\/+/g, '/');
-        //     var response = await window.fetch(url);
-        //     var json = await response.json();
-        //     this.callAsMethod(viewIndex, json);
-        //     console.log('Leave pageReviewSpecificIndexBeforeRender with ', this.state.skus2ids)
-        // }
 
         var _linksFromText = function (str) {
             var m,
@@ -387,8 +323,6 @@
         }
 
         Wizard.prototype.nextPage = async function (pageName, ...passOnArgs) {
-            console.log('Enter Wizard.nextPage with %s -----------------------------------------', pageName);
-
             if (this.state.lastPageName) {
                 await this._execute('page-' + this.state.pageName + '-on-leave', passOnArgs);
             }
@@ -462,10 +396,6 @@
             }
         };
 
-        Handlebars.registerHelper('skuClass', function(tableInternalId) {
-            return new Handlebars.SafeString('FT_' + this.state.tableInternalId2published[tableInternalId]);
-        });
-
         // {{#wizardIncludeTemplate "publish-tables-and-skus"}}{{/wizardIncludeTemplate}}
         Handlebars.registerHelper('wizardIncludeTemplate', function(templateId) {
             var html = Handlebars.compile(
@@ -479,10 +409,6 @@
         Wizard.prototype.render = function () {
             console.log('Enter render');
             try {
-                // this.el.main.innerHTML = handlebars.render(
-                //     this.pageEl.innerHTML.toString(),
-                //     { wizard: this }
-                // );
                 // No caching:
                 this.el.main.innerHTML = Handlebars.compile(
                     this.pageEl.innerHTML.toString()
@@ -621,7 +547,6 @@
         <h3>SKU Maps</h3>
         <ul class='skus'>
             {{#each wizard.state.sku2tableInternalId}}
-                <!-- if lookup tableInternalId2published this  -->
                 <li><a class='FT_{{this}}' target='_new' href='preview-map.html#{{@key}}' title='In {{this}}'>{{@key}}</a></li>
             {{/each}}
         </ul>
