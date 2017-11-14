@@ -9539,12 +9539,9 @@ module.exports = function (regExp, replace) {
 function _asyncToGenerator(fn) { return function () { var gen = fn.apply(this, arguments); return new Promise(function (resolve, reject) { function step(key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { return Promise.resolve(value).then(function (value) { step("next", value); }, function (err) { step("throw", err); }); } } return step("next"); }); }; }
 
 var Wizard = __webpack_require__(334);
+var LoadGoogle = __webpack_require__(360);
 
-var script = document.createElement('script');
-script.setAttribute('src', 'https://apis.google.com/js/api.js');
-script.setAttribute('onload', "window.ENTER()");
-script.setAttribute('onreadystatechange', "if (this.readyState === 'complete') this.onload()");
-document.head.appendChild(script);
+LoadGoogle.now("window.ENTER()");
 
 var Config;
 var Config_Url = 'Config.js';
@@ -14601,6 +14598,21 @@ PrintVisitor.prototype.HashPair = function (pair) {
 /***/ (function(module, exports) {
 
 
+
+/***/ }),
+/* 360 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+module.exports.now = function (onload) {
+    var script = document.createElement('script');
+    script.setAttribute('src', 'https://apis.google.com/js/api.js');
+    script.setAttribute('onload', onload);
+    script.setAttribute('onreadystatechange', "if (this.readyState === 'complete') this.onload()");
+    document.head.appendChild(script);
+};
 
 /***/ })
 /******/ ]);

@@ -1,12 +1,9 @@
 "use strict";
 
 const Wizard = require('./lib/Wizard');
+const LoadGoogle = require('./lib/LoadGoogle');
 
-var script = document.createElement('script');
-script.setAttribute('src', 'https://apis.google.com/js/api.js');
-script.setAttribute('onload', "window.ENTER()");
-script.setAttribute('onreadystatechange', "if (this.readyState === 'complete') this.onload()");
-document.head.appendChild(script);
+LoadGoogle.now("window.ENTER()");
 
 var Config;
 const Config_Url = 'Config.js';

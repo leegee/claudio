@@ -5,7 +5,6 @@ htdocs/cgi-bin/latest_skus.csv
 htdocs/_
 node_modules/
 logs/
-lib/
 scripts/
 DEV.md
 README.txt
