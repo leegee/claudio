@@ -1,5 +1,4 @@
 use warnings;
-
 # See https://developers.google.com/fusiontables/docs/v2/using#ImportingRowsIntoTables
 # Imports: https://support.google.com/fusiontables/answer/171181?hl=en
 
@@ -32,7 +31,11 @@ my $FUSION_TABLE_LIMIT = 100_000;
 my $COMMIT_FREQ = 10_000;
 
 our $CONFIG = {
-	dbname				=> 'geosku',
+	db => {
+		user			=> 'izelplan_geosku',
+		pass			=> 'g305ku-p455w0rd',
+		dbname			=> 'izelplan_geosku',
+	},
 	geosku_table_name	=> 'geosku',
 	index_table_name	=> 'table_index',
 	db_path				=> 'sqlite.db',
@@ -192,7 +195,8 @@ sub new {
 	my $inv  = shift;
 	my $args = ref($_[0])? shift : {@_};
 	$args->{us_counties_table_id} ||= $DEFAULT_US_COUNTIES_TABLE_ID;
-	$args->{dbname} ||= $CONFIG->{dbname};
+	$args->{db} ||= $CONFIG->{db};
+
 	my $self = {
 		%$args,
 		jsoner	=> JSON::Any->new,
@@ -406,28 +410,36 @@ sub _connect {
 	my $self = shift;
 	TRACE 'Enter _connect';
 
-	# my $dsn = "dbi:SQLite:dbname=$CONFIG->{db_path}"; my $user = ''; my $pass = '';
-	my $dsn = "dbi:mysql"; # "dbi:mysql:dbname=$dbname";
-	my $user = 'root';
-	my $pass = 'admin';
+	my $dsn = "dbi:mysql";
 
-	$self->{dbh} = DBI->connect("DBI:mysql:", $user, $pass)
-		or LOGDIE "Cannot connect to local mysql with $user:$pass";
+	$self->{dbh} = DBI->connect(
+		"DBI:mysql:".$self->{db}->{dbname},
+		$self->{db}->{user},
+		$self->{db}->{pass}
+	) or LOGDIE "Cannot connect to local mysql (without dbname):", Dumper($self->{db}), "\n- ", $DBI::errstr;
 
 	if ($self->{recreate_db}) {
-		INFO 'Drop and create DB '.$self->{dbname};
+		INFO 'Drop and create DB '.$self->{db}->{dbname};
 		INFO '!' x 100;
-		$self->{dbh}->do("DROP DATABASE IF EXISTS $self->{dbname}") or LOGDIE "Cannot create database geosku"; # XXX
-		$self->{dbh}->do("CREATE DATABASE IF NOT EXISTS $self->{dbname}") or LOGDIE "Cannot create database geosku";
+		$self->{dbh}->do("DROP DATABASE IF EXISTS $self->{db}->{dbname}")
+			or LOGDIE "Cannot create database, ", $self->{db}->{dbname}, ' - ', $DBI::errstr;
+		INFO "Dropped $self->{db}->{dbname}";
+		$self->{dbh}->do("CREATE DATABASE IF NOT EXISTS $self->{db}->{dbname}")
+			or LOGDIE "Cannot create database, ", $self->{db}->{dbane}, ' - ', $DBI::errstr;
+		INFO "Created $self->{db}->{dbname}";
 	}
 
-
-	$self->{dbh} = DBI->connect($dsn . ':'. $self->{dbname}, $user, $pass, {
-		RaiseError => 1,
-		AutoCommit => 0,
-		mysql_server_prepare => 1,
-		mysql_auto_reconnect => 1,
-	}) or LOGCONFESS $DBI::errstr;
+	$self->{dbh} = DBI->connect(
+		'dbi:mysql:' . $self->{db}->{dbname},
+		$self->{db}->{user},
+		$self->{db}->{pass},
+		{
+			RaiseError => 1,
+			AutoCommit => 0,
+			mysql_server_prepare => 1,
+			mysql_auto_reconnect => 1,
+		}
+	) or LOGCONFESS $DBI::errstr;
 	TRACE 'Leave _connect';
 }
 
