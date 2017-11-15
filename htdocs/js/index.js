@@ -2,17 +2,14 @@
 
 const Wizard = require('./lib/Wizard');
 const LoadGoogle = require('./lib/LoadGoogle');
+const Config = require('./Config');
 
 LoadGoogle.now("window.ENTER()");
 
-var Config;
-const Config_Url = 'Config.js';
 const izel = {};
 
 window.ENTER = async function () {
     console.log('ENTER');
-    var _ = await window.fetch(Config_Url);
-    Config = await _.json();
     gapi.load('client:auth2', initClient);
 };
 
@@ -25,16 +22,12 @@ function initClient() {
     }).then(function () {
         document.getElementById('spinner').setAttribute('style', 'display:none');
         window.GoogleAuth = gapi.auth2.getAuthInstance();
-        window.GoogleAuth.isSignedIn.listen(updateSigninStatus);
+        window.GoogleAuth.isSignedIn.listen(setSigninStatus);
         setSigninStatus();
         document.getElementById('auth-button').addEventListener('click', function () {
             window.GoogleAuth.isSignedIn.get() ? window.GoogleAuth.signOut() : window.GoogleAuth.signIn();
         });
     });
-}
-
-function updateSigninStatus(isSignedIn) {
-    setSigninStatus(isSignedIn);
 }
 
 function setSigninStatus(isSignedIn) {
@@ -163,7 +156,7 @@ izel.cgi = async function (args) {
             if (request.readyState === XMLHttpRequest.DONE) {
                 if (request.status === 200) {
                     if (args.nextPage) {
-                        window.wizard.nextPage(args.nextPage, this.state.indexJsDir);
+                        this.nextPage(args.nextPage, this.state.indexJsDir);
                     }
                     resolve();
                 } else {
@@ -182,7 +175,7 @@ izel.pagePreviewDbBeforeRender = async function () {
         Config.endpoints.local + '?action=preview-db'
     );
     var json = await response.json();
-    this.callAsMethod(viewIndex, json);
+    this.callAsMethod('viewIndex', json);
 };
 
 izel.setCssClass = function (internalTableId, isPublished) {

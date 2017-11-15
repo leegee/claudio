@@ -63,15 +63,15 @@ var Wizard = function (state) {
         this.nextPage('menu');
     });
     this.el.main.setAttribute('style', 'display:block"');
-    // if (window.history.state && window.history.state.pageName) {
-    //     this.state = window.history.state;
-    //     this.nextPage(this.state.pageName);
-    // }
+    if (window.history.state && window.history.state.pageName) {
+        this.state = window.history.state;
+        this.nextPage(this.state.pageName);
+    }
 }
 
 Wizard.prototype.callAsMethod = function (method, ...args) {
     if (typeof method === 'string') {
-        method = window[method];
+        method = this.state.namespace[method];
     }
     return method.apply(this, args);
 }
@@ -92,8 +92,8 @@ Wizard.prototype.nextPage = async function (pageName, ...passOnArgs) {
         this.el.main.innerHTML = '<h2>Error</h2><p>Could not find the requested page, ' + pageName + '</p>';
         return;
     }
-    this.state.nextPageName = this.pageEl.dataset.nextPage || null;
 
+    this.state.nextPageName = this.pageEl.dataset.nextPage || null;
     this.state.pageName = pageName;
 
     var fnNames = [

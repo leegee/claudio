@@ -9540,35 +9540,21 @@ function _asyncToGenerator(fn) { return function () { var gen = fn.apply(this, a
 
 var Wizard = __webpack_require__(334);
 var LoadGoogle = __webpack_require__(360);
+var Config = __webpack_require__(361);
 
 LoadGoogle.now("window.ENTER()");
 
-var Config;
-var Config_Url = 'Config.js';
 var izel = {};
 
 window.ENTER = _asyncToGenerator( /*#__PURE__*/regeneratorRuntime.mark(function _callee() {
-    var _;
-
     return regeneratorRuntime.wrap(function _callee$(_context) {
         while (1) {
             switch (_context.prev = _context.next) {
                 case 0:
                     console.log('ENTER');
-                    _context.next = 3;
-                    return window.fetch(Config_Url);
-
-                case 3:
-                    _ = _context.sent;
-                    _context.next = 6;
-                    return _.json();
-
-                case 6:
-                    Config = _context.sent;
-
                     gapi.load('client:auth2', initClient);
 
-                case 8:
+                case 2:
                 case 'end':
                     return _context.stop();
             }
@@ -9585,16 +9571,12 @@ function initClient() {
     }).then(function () {
         document.getElementById('spinner').setAttribute('style', 'display:none');
         window.GoogleAuth = gapi.auth2.getAuthInstance();
-        window.GoogleAuth.isSignedIn.listen(updateSigninStatus);
+        window.GoogleAuth.isSignedIn.listen(setSigninStatus);
         setSigninStatus();
         document.getElementById('auth-button').addEventListener('click', function () {
             window.GoogleAuth.isSignedIn.get() ? window.GoogleAuth.signOut() : window.GoogleAuth.signIn();
         });
     });
-}
-
-function updateSigninStatus(isSignedIn) {
-    setSigninStatus(isSignedIn);
 }
 
 function setSigninStatus(isSignedIn) {
@@ -9796,7 +9778,7 @@ izel.cgi = function () {
                                 if (request.readyState === XMLHttpRequest.DONE) {
                                     if (request.status === 200) {
                                         if (args.nextPage) {
-                                            window.wizard.nextPage(args.nextPage, _this4.state.indexJsDir);
+                                            _this4.nextPage(args.nextPage, _this4.state.indexJsDir);
                                         }
                                         resolve();
                                     } else {
@@ -9839,7 +9821,7 @@ izel.pagePreviewDbBeforeRender = _asyncToGenerator( /*#__PURE__*/regeneratorRunt
                 case 5:
                     json = _context8.sent;
 
-                    this.callAsMethod(viewIndex, json);
+                    this.callAsMethod('viewIndex', json);
 
                 case 7:
                 case 'end':
@@ -9964,15 +9946,15 @@ var Wizard = function Wizard(state) {
         _this.nextPage('menu');
     });
     this.el.main.setAttribute('style', 'display:block"');
-    // if (window.history.state && window.history.state.pageName) {
-    //     this.state = window.history.state;
-    //     this.nextPage(this.state.pageName);
-    // }
+    if (window.history.state && window.history.state.pageName) {
+        this.state = window.history.state;
+        this.nextPage(this.state.pageName);
+    }
 };
 
 Wizard.prototype.callAsMethod = function (method) {
     if (typeof method === 'string') {
-        method = window[method];
+        method = this.state.namespace[method];
     }
 
     for (var _len = arguments.length, args = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
@@ -10020,8 +10002,8 @@ Wizard.prototype.nextPage = function () {
                         return _context.abrupt('return');
 
                     case 8:
-                        this.state.nextPageName = this.pageEl.dataset.nextPage || null;
 
+                        this.state.nextPageName = this.pageEl.dataset.nextPage || null;
                         this.state.pageName = pageName;
 
                         fnNames = ['page-' + this.state.pageName, 'page-' + this.state.pageName + '-before-render'];
@@ -14612,6 +14594,25 @@ module.exports.now = function (onload) {
     script.setAttribute('onload', onload);
     script.setAttribute('onreadystatechange', "if (this.readyState === 'complete') this.onload()");
     document.head.appendChild(script);
+};
+
+/***/ }),
+/* 361 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+module.exports = {
+    "apiKey": "AIzaSyDAdOILIN2SPM_1iPKJMbHd9jOck8H9J7o",
+    "clientId": "837054515213-almgarbjlt0tv1qc1fjem1hs4ui3mebr.apps.googleusercontent.com",
+    "discoveryUrls": ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"],
+    "scopes": ["https://www.googleapis.com/auth/fusiontables", "https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/plus.login"],
+    "endpoints": {
+        "local": "/cgi-bin/upload-skus.cgi",
+        "lookupSkus": "/cgi-bin/lookup.cgi"
+    },
+    "indexBaseDir": "/temp/"
 };
 
 /***/ })

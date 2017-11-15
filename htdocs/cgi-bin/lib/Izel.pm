@@ -32,9 +32,9 @@ my $COMMIT_FREQ = 10_000;
 
 our $CONFIG = {
 	db => {
-		user			=> 'izelplan_geosku',
-		pass			=> 'g305ku-p455w0rd',
-		dbname			=> 'izelplan_geosku',
+		user			=> $ENV{IZEL_MAPS_DB_USER} || 'izelplan_geosku',
+		pass			=> $ENV{IZEL_MAPS_DB_PASS} || 'g305ku-p455w0rd',
+		dbname			=> $ENV{IZEL_MAPS_DB_DBNAME} || 'izelplan_geosku',
 	},
 	geosku_table_name	=> 'geosku',
 	index_table_name	=> 'table_index',
