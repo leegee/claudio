@@ -15,10 +15,10 @@ window.ENTER = async function () {
 
 function initClient() {
     gapi.client.init({
-        'apiKey': Config.apiKey,
-        'discoveryDocs': Config.discoveryUrls,
-        'clientId': Config.clientId,
-        'scope': Config.scopes.join(' ')
+        apiKey: Config.apiKey,
+        discoveryDocs: Config.discoveryUrls,
+        clientId: Config.clientId,
+        scope: Config.scopes.join(' ')
     }).then(function () {
         document.getElementById('spinner').setAttribute('style', 'display:none');
         window.GoogleAuth = gapi.auth2.getAuthInstance();
@@ -88,11 +88,11 @@ izel.pageSelectSkusAfterRender = async function () {
 izel.pageWipeGoogleDataAfterRender = async function () {
     if (confirm('Really wipe all Fusion Table data?')) {
         this.callAsMethod('cgi', {
-            'action': 'wipe-google-data',
+            action: 'wipe-google-data',
             logWindowId: 'wipe-google-data-log'
         });
     } else {
-        return Promise.resolve();
+        return this.nextPage('menu');
     }
 };
 
@@ -102,7 +102,7 @@ izel.pageMapSomeSkusBeforeRender = async function () {
 
 izel.pageMapSomeSkusAfterRender = async function () {
     this.callAsMethod('cgi', {
-        'action': 'map-some-skus',
+        action: 'map-some-skus',
         'skus-text': this.state.skusToProcess,
         logWindowId: 'map-some-skus-log'
     });
@@ -110,17 +110,17 @@ izel.pageMapSomeSkusAfterRender = async function () {
 
 izel.pageAugmentDbAfterRender = function () {
     this.callAsMethod('cgi', {
-        'action': 'augment-db',
+        action: 'augment-db',
         'skus-file': this.state.file,
-        'logWindowId': 'augment-db-log'
+        logWindowId: 'augment-db-log'
     })
 };
 
 izel.pageUploadDbAfterRender = function () {
     this.callAsMethod('cgi', {
-        'action': 'upload-db',
+        action: 'upload-db',
         'skus-file': this.state.file,
-        'logWindowId': 'upload-db-log'
+        logWindowId: 'upload-db-log'
     })
 };
 
@@ -145,7 +145,7 @@ izel.cgi = async function (args) {
             }
             ;
 
-        for (key in args) {
+        for (let key in args) {
             data.append(key, args[key]);
         }
 

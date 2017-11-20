@@ -9564,10 +9564,10 @@ window.ENTER = _asyncToGenerator( /*#__PURE__*/regeneratorRuntime.mark(function 
 
 function initClient() {
     gapi.client.init({
-        'apiKey': Config.apiKey,
-        'discoveryDocs': Config.discoveryUrls,
-        'clientId': Config.clientId,
-        'scope': Config.scopes.join(' ')
+        apiKey: Config.apiKey,
+        discoveryDocs: Config.discoveryUrls,
+        clientId: Config.clientId,
+        scope: Config.scopes.join(' ')
     }).then(function () {
         document.getElementById('spinner').setAttribute('style', 'display:none');
         window.GoogleAuth = gapi.auth2.getAuthInstance();
@@ -9673,14 +9673,14 @@ izel.pageWipeGoogleDataAfterRender = _asyncToGenerator( /*#__PURE__*/regenerator
                     }
 
                     this.callAsMethod('cgi', {
-                        'action': 'wipe-google-data',
+                        action: 'wipe-google-data',
                         logWindowId: 'wipe-google-data-log'
                     });
                     _context4.next = 5;
                     break;
 
                 case 4:
-                    return _context4.abrupt('return', Promise.resolve());
+                    return _context4.abrupt('return', this.nextPage('menu'));
 
                 case 5:
                 case 'end':
@@ -9711,7 +9711,7 @@ izel.pageMapSomeSkusAfterRender = _asyncToGenerator( /*#__PURE__*/regeneratorRun
             switch (_context6.prev = _context6.next) {
                 case 0:
                     this.callAsMethod('cgi', {
-                        'action': 'map-some-skus',
+                        action: 'map-some-skus',
                         'skus-text': this.state.skusToProcess,
                         logWindowId: 'map-some-skus-log'
                     });
@@ -9726,17 +9726,17 @@ izel.pageMapSomeSkusAfterRender = _asyncToGenerator( /*#__PURE__*/regeneratorRun
 
 izel.pageAugmentDbAfterRender = function () {
     this.callAsMethod('cgi', {
-        'action': 'augment-db',
+        action: 'augment-db',
         'skus-file': this.state.file,
-        'logWindowId': 'augment-db-log'
+        logWindowId: 'augment-db-log'
     });
 };
 
 izel.pageUploadDbAfterRender = function () {
     this.callAsMethod('cgi', {
-        'action': 'upload-db',
+        action: 'upload-db',
         'skus-file': this.state.file,
-        'logWindowId': 'upload-db-log'
+        logWindowId: 'upload-db-log'
     });
 };
 
@@ -9767,7 +9767,7 @@ izel.cgi = function () {
                                 logwindow.scrollTop = logwindow.scrollHeight + logwindow.clientHeight;
                             };
 
-                            for (key in args) {
+                            for (var key in args) {
                                 data.append(key, args[key]);
                             }
 
@@ -9931,6 +9931,9 @@ var Wizard = function Wizard(state) {
     Object.keys(state).forEach(function (key) {
         _this.state[key] = state[key];
     });
+    this.namespace = this.state.namespace;
+    delete this.namesapce;
+
     this.pageEl = null;
     this.el = {
         main: document.getElementById('main'),
@@ -9946,15 +9949,22 @@ var Wizard = function Wizard(state) {
         _this.nextPage('menu');
     });
     this.el.main.setAttribute('style', 'display:block"');
-    if (window.history.state && window.history.state.pageName) {
-        this.state = window.history.state;
-        this.nextPage(this.state.pageName);
-    }
+
+    // if (window.history.state && window.history.state.pageName) {
+    //     this.state = window.history.state;
+    //     this.nextPage(this.state.pageName);
+    // }
+    // window.onpopstate = (e) => {
+    //     if (e.state) this.state = e.state;
+    //     this.nextPage(this.state.pageName);
+    //     console.info('>>>>>>>>>>>>> Location: ', document.location);
+    //     console.info('>>>>>>>>>>>>> State: ', e.state);
+    // }
 };
 
 Wizard.prototype.callAsMethod = function (method) {
     if (typeof method === 'string') {
-        method = this.state.namespace[method];
+        method = this.namespace[method];
     }
 
     for (var _len = arguments.length, args = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
@@ -10032,12 +10042,12 @@ Wizard.prototype.nextPage = function () {
 
                         this.state.lastPageName = this.state.pageName;
 
-                        window.location.hash = this.state.pageName;
+                        // window.location.hash = this.state.pageName;
                         // window.history.pushState(this.state, 'Page ' + this.state.pageName, window.location.toString());
 
                         console.log('Leave nextPage with page = ', this.state.pageName);
 
-                    case 21:
+                    case 20:
                     case 'end':
                         return _context.stop();
                 }
@@ -10068,16 +10078,15 @@ Wizard.prototype._execute = function () {
                         return _context2.abrupt('return');
 
                     case 3:
-                        $name = this.state.namespace || window;
-
-                        console.debug('Namespace: ', $name);
+                        $name = this.namespace || window;
                         promises = [];
 
                         if (typeof fns === 'string') fns = [fns];
+
                         _iteratorNormalCompletion = true;
                         _didIteratorError = false;
                         _iteratorError = undefined;
-                        _context2.prev = 10;
+                        _context2.prev = 9;
                         for (_iterator = fns[Symbol.iterator](); !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
                             f = _step.value;
                             fn = this._antsToCamelCase(f);
@@ -10091,64 +10100,64 @@ Wizard.prototype._execute = function () {
                                 console.log('Did not find ', fn);
                             }
                         }
-                        _context2.next = 18;
+                        _context2.next = 17;
                         break;
 
-                    case 14:
-                        _context2.prev = 14;
-                        _context2.t0 = _context2['catch'](10);
+                    case 13:
+                        _context2.prev = 13;
+                        _context2.t0 = _context2['catch'](9);
                         _didIteratorError = true;
                         _iteratorError = _context2.t0;
 
-                    case 18:
+                    case 17:
+                        _context2.prev = 17;
                         _context2.prev = 18;
-                        _context2.prev = 19;
 
                         if (!_iteratorNormalCompletion && _iterator.return) {
                             _iterator.return();
                         }
 
-                    case 21:
-                        _context2.prev = 21;
+                    case 20:
+                        _context2.prev = 20;
 
                         if (!_didIteratorError) {
-                            _context2.next = 24;
+                            _context2.next = 23;
                             break;
                         }
 
                         throw _iteratorError;
 
+                    case 23:
+                        return _context2.finish(20);
+
                     case 24:
-                        return _context2.finish(21);
+                        return _context2.finish(17);
 
                     case 25:
-                        return _context2.finish(18);
-
-                    case 26:
                         if (!promises) {
-                            _context2.next = 33;
+                            _context2.next = 32;
                             break;
                         }
 
                         console.log('Waiting on ', promises.length, promises);
-                        _context2.next = 30;
+                        _context2.next = 29;
                         return Promise.all(promises);
 
-                    case 30:
+                    case 29:
                         console.log('Done all promises');
-                        _context2.next = 35;
+                        _context2.next = 34;
                         break;
 
-                    case 33:
+                    case 32:
                         console.log('Leave now');
                         return _context2.abrupt('return', Promise.resolve());
 
-                    case 35:
+                    case 34:
                     case 'end':
                         return _context2.stop();
                 }
             }
-        }, _callee2, this, [[10, 14, 18, 26], [19,, 21, 25]]);
+        }, _callee2, this, [[9, 13, 17, 25], [18,, 20, 24]]);
     }));
 
     return function (_x2, _x3) {

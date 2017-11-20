@@ -48,6 +48,9 @@ var Wizard = function (state) {
     Object.keys(state).forEach((key) => {
         this.state[key] = state[key];
     });
+    this.namespace = this.state.namespace;
+    delete this.namesapce;
+
     this.pageEl = null;
     this.el = {
         main: document.getElementById('main'),
@@ -63,15 +66,22 @@ var Wizard = function (state) {
         this.nextPage('menu');
     });
     this.el.main.setAttribute('style', 'display:block"');
-    if (window.history.state && window.history.state.pageName) {
-        this.state = window.history.state;
-        this.nextPage(this.state.pageName);
-    }
+
+    // if (window.history.state && window.history.state.pageName) {
+    //     this.state = window.history.state;
+    //     this.nextPage(this.state.pageName);
+    // }
+    // window.onpopstate = (e) => {
+    //     if (e.state) this.state = e.state;
+    //     this.nextPage(this.state.pageName);
+    //     console.info('>>>>>>>>>>>>> Location: ', document.location);
+    //     console.info('>>>>>>>>>>>>> State: ', e.state);
+    // }
 }
 
 Wizard.prototype.callAsMethod = function (method, ...args) {
     if (typeof method === 'string') {
-        method = this.state.namespace[method];
+        method = this.namespace[method];
     }
     return method.apply(this, args);
 }
@@ -117,7 +127,7 @@ Wizard.prototype.nextPage = async function (pageName, ...passOnArgs) {
 
     this.state.lastPageName = this.state.pageName;
 
-    window.location.hash = this.state.pageName;
+    // window.location.hash = this.state.pageName;
     // window.history.pushState(this.state, 'Page ' + this.state.pageName, window.location.toString());
 
     console.log('Leave nextPage with page = ', this.state.pageName);
@@ -126,10 +136,10 @@ Wizard.prototype.nextPage = async function (pageName, ...passOnArgs) {
 Wizard.prototype._execute = async function (fns, passOnArgs) {
     console.log('Wizard._execute', fns);
     if (!fns) return;
-    let $name = this.state.namespace || window;
-    console.debug('Namespace: ', $name);
+    let $name = this.namespace || window;
     let promises = [];
     if (typeof fns === 'string') fns = [fns];
+
     for (let f of fns) {
         var fn = this._antsToCamelCase(f);
         console.log('Look for ', fn);
