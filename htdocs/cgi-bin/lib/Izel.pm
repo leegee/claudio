@@ -40,6 +40,7 @@ our $CONFIG = {
 	index_table_name	=> 'table_index',
 	db_path				=> 'sqlite.db',
 	endpoints			=> {
+		main_google => 'https://www.googleapis.com/upload/fusiontables/v2/tables/',
 		_create_table_on_google	=> 'https://www.googleapis.com/fusiontables/v2/tables',
 		gsql => 'https://www.googleapis.com/fusiontables/v2/query',
 	}
@@ -828,7 +829,7 @@ sub upload_csv_rows {
 	TRACE "Enter upload_csv_rows with ", $path;
 	$self->require_defined_fields('table_id');
 
-    my $url = 'https://www.googleapis.com/upload/fusiontables/v2/tables/'
+    my $url = $CONFIG->{endpoints}->{main_google}
 		. $self->{table_id} . '/import?uploadType=media';
 
 	INFO "Posting $path to $url";
