@@ -8,12 +8,13 @@ LoadGoogle.now("window.ENTER()");
 
 const izel = {};
 
-window.ENTER = async function () {
+window.ENTER = function () {
     console.log('ENTER');
     gapi.load('client:auth2', initClient);
 };
 
 function initClient() {
+    console.log(Config);
     gapi.client.init({
         apiKey: Config.apiKey,
         discoveryDocs: Config.discoveryUrls,

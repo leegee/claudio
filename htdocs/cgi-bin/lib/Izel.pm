@@ -152,9 +152,11 @@ sub date_to_name {
 }
 
 sub copy_cgi_file {
+	TRACE "Enter copy_cgi_file";
 	my $self = shift;
 	my $skus_file_handle = shift;
     my $uploaded_sku_csv_path = 'latest_skus.csv';
+	TRACE "Switch on binmode";
     binmode $skus_file_handle;
     INFO 'Write uploaded skus to temp file at ', $uploaded_sku_csv_path;
 
@@ -185,7 +187,11 @@ sub status_json {
 		)->[0]->[0];
 	};
 	if ($@) {
-		$res = { error => $@ };
+		$res = { error => $@, dbierr => $DBI::err };
+		if ($DBI::err == 1146) { # First run
+			$self->{recreate_db} = 1;
+			$self->get_dbh();
+		}
 	}
 	$self->{dbh}->disconnect;
 	return $self->{jsoner}->encode( $res );
@@ -227,6 +233,7 @@ sub publish_fusion_table {
 }
 
 sub upload_db {
+	INFO "Enter upload_db with $args->{skus_file_handle}";
     my $self = shift;
     my $args = ref($_[0])? shift : {@_};
     TRACE 'Enter upload_db';

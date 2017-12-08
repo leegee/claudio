@@ -1,4 +1,4 @@
-#!perl
+#!/usr/bin/perl
 use strict;
 use warnings;
 use DBI;
@@ -8,10 +8,10 @@ my $sku = $ENV{QUERY_STRING};
 print "Content-type: text/plain\n\n";
 
 # my $dsn = "dbi:SQLite:dbname=$CONFIG->{db_path}"; my $user = ''; my $pass = '';
-my $dbname = 'geosku';
+my $user = $ENV{IZEL_MAPS_DB_USER} || 'izelplan_geosku';
+my $pass = $ENV{IZEL_MAPS_DB_PASS} || 'g305ku-p455w0rd';
+my $dbname = $ENV{IZEL_MAPS_DB_DBNAME} || 'izelplan_geosku';
 my $dsn = "dbi:mysql:dbname=$dbname";
-my $user = 'root';
-my $pass = 'admin';
 
 my $dbh = DBI->connect($dsn, $user, $pass)
         or die "Cannot connect to local mysql with $dsn $user:$pass";
