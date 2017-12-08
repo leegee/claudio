@@ -18,6 +18,8 @@ eval {
     #     layout => '%m %l\n'
     # });
 
+    my  $LOG_LEVEL = 'TRACE';
+
     $CGI::POST_MAX = 1024 * 100000000; # 208795632
     $CGI::DISABLE_UPLOADS = 0;
 
@@ -68,7 +70,7 @@ eval {
         }
 
         elsif ($cgi->param('action') eq 'upload-db'){
-            real_time_html('INFO');
+            real_time_html($LOG_LEVEL);
             INFO "Will upload the file...";
             WARN "FILE: $IN";
             my $izel = Izel->new(
@@ -82,7 +84,7 @@ eval {
         }
 
         elsif ($cgi->param('action') eq 'augment-db'){
-            real_time_html('INFO');
+            real_time_html($LOG_LEVEL);
             INFO "Will upload the file...";
             my $izel = Izel->new(
                 auth_string         => $ENV{QUERY_STRING},
@@ -95,7 +97,7 @@ eval {
         }
 
         elsif ($cgi->param('action') eq 'wipe-google-data') {
-            real_time_html('DEBUG');
+            real_time_html($LOG_LEVEL);
             INFO "Will wipe-google-data";
             my $izel = Izel->new(
                 auth_string         => $ENV{QUERY_STRING},
@@ -106,7 +108,7 @@ eval {
         }
 
         elsif ($cgi->param('action') eq 'map-some-skus') {
-            real_time_html('DEBUG');
+            real_time_html($LOG_LEVEL);
             INFO "Will map some skus...";
             my $izel = Izel->new(
                 auth_string         => $ENV{QUERY_STRING},
@@ -118,7 +120,7 @@ eval {
             INFO "Finished - you can now leave this screen";
         }
         elsif ($cgi->param('action') eq 'preview-db') {
-            logging('DEBUG');
+            logging($LOG_LEVEL);
             print "Content-type: application/json\n\n";
             my $izel = Izel->new();
             print $izel->preview_db();
@@ -127,18 +129,18 @@ eval {
         }
 
         elsif ($cgi->param('action')) {
-            real_time_html();
+            real_time_html($LOG_LEVEL);
             LOGDIE 'Unknown Action, ' . $cgi->param('action');
         }
         else {
-            real_time_html();
+            real_time_html($LOG_LEVEL);
             LOGDIE 'Missing action field';
         }
     }
 
 
     sub real_time_html {
-        my $level = shift || 'INFO';
+        my $level = shift || $LOG_LEVEL;
         print "Content-type: text/html\r\n\r\n";
         $|++;
         Log::Log4perl->init(\"

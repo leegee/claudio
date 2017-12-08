@@ -775,6 +775,7 @@ sub _post_blob {
 	TRACE 'Enter _post_blob for ', $url;
 	$self->require_defined_fields('auth_string');
 	my $isFormData;
+	my $isJson;
 
 	if (ref $payload) {
 		if (ref $payload eq 'ARRAY') {
@@ -786,7 +787,11 @@ sub _post_blob {
 			# $self->{ua}->default_header( 'content-type' => 'application/json' );
 		} else {
 			TRACE 'Is json data';
+			$isJson = 1;
 			$payload = $self->{jsoner}->encode($payload);
+			TRACE '--begin payload--';
+			TRACE $payload;
+			TRACE '--end  payload--';
 			$self->{ua}->default_header( 'content-type' => 'application/json' );
 		}
 	} else {
@@ -798,10 +803,20 @@ sub _post_blob {
 
 	TRACE 'Final URL: POST ', $url;
 
-	my $response = $self->{ua}->post(
-		$url,
-		($isFormData ? $payload : (Content => $payload))
-	);
+	my $response;
+
+	if ($isFormData) {
+		TRACE 'Posting as form data';
+		$response = $self->{ua}->post( $url, $payload );
+	} else {
+		TRACE 'Posting as non-form data';
+		$response = $self->{ua}->post(
+			$url,
+			Content => $payload,
+			($isJson? ('Content-type' => 'application/json') : ())
+		);
+		TRACE 'Request was: ', $response->request->as_string();
+	}
 
 	# DEBUG Dumper $response;
 
