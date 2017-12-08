@@ -18,7 +18,7 @@ eval {
     #     layout => '%m %l\n'
     # });
 
-    my  $LOG_LEVEL = 'TRACE';
+    my  $LOG_LEVEL = 'INFO';
 
     $CGI::POST_MAX = 1024 * 100000000; # 208795632
     $CGI::DISABLE_UPLOADS = 0;
