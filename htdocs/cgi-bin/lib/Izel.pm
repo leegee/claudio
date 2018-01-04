@@ -63,11 +63,14 @@ sub map_some_skus {
 		LOGDIE 'No skus-text supplied! '. Dumper($args->{skus_text});
 	}
 
-	$args->{skus_text} = [sort @{$args->{skus_text}}];
+	$args->{skus_text} = {
+		map {$_ => 1} @{$args->{skus_text}}
+	};
+	$args->{skus_text} = [sort keys %{$args->{skus_text}}];
 
 	INFO 'Got ',
 		(1 + $#{$args->{skus_text}}),
-		' SKUs: ', join',',@{$args->{skus_text}};
+		' unique SKUs: ', join',',@{$args->{skus_text}};
 	INFO 'Checking validity and upload status';
 
 	foreach my $sku (@{ $args->{skus_text} }){
@@ -86,7 +89,7 @@ sub map_some_skus {
 		}
 	}
 
-	my @msg = 'You supplied '. (1 + $#{$args->{skus_text}}). ' SKUs';
+	my @msg = 'You supplied '. (1 + $#{$args->{skus_text}}). ' unique and unpublished, valid SKUs';
 	if (@invalid_skus) {
 		push @msg, 'The following '. (1+$#invalid_skus).' SKUs are not in the database: ', join",", @invalid_skus;
 	}
@@ -106,7 +109,7 @@ sub map_some_skus {
 		$tables = $self->create_fusion_tables( \@skus_todo );
 
 		foreach my $table (@$tables) {
-			$table->create();
+			# $table->create();
 			INFO 'Created merged table, ', $table->{merged_table_google_id};
 			push @merged_table_google_ids, $table->{merged_table_google_id};
 		}
@@ -527,9 +530,9 @@ sub create_fusion_tables {
 	}
 	$sql .= " GROUP BY sku ORDER BY c DESC";
 
-	INFO $sql;
-
 	my $counts = $self->{dbh}->selectall_arrayref($sql);
+
+	INFO @$counts," geo_id2 to process.";
 
 	if (not $counts) {
 		LOGCONFESS 'Nothing?! ', $sql, "\n\n", Dumper($counts);
@@ -557,6 +560,7 @@ sub create_fusion_tables {
 		# TODO add count of data size < 250 MB per tble, < 1 GB in total,
 		# TODO If big record doesn't fit, find a smaller one.
 		if ($tables->[$table_index]->{count} + $record->[0] > $fusion_table_limit) {
+			INFO 'Create Fusion Table as $fusion_table_limit exceeded, ', $fusion_table_limit;
 			$tables->[$table_index]->create();
 			$table_index ++;
 			$tables->[$table_index] = Izel::Table->new( $table_args );
@@ -573,6 +577,7 @@ sub create_fusion_tables {
 	}
 
 	if (not $tables->[$table_index]->{created}) {
+		INFO 'Create Fusion Table as not $tables->[$table_index]->{created}';
 		$tables->[$table_index]->create();
 	}
 
